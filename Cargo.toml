@@ -6,6 +6,7 @@ members = [
     "crates/tr-session",
     "crates/tr-teleop",
     "crates/tr-robot",
+    "crates/tr-so101",
     "crates/tr-teleop-node",
     "crates/tr-robot-node",
     "crates/tr-bridge",
