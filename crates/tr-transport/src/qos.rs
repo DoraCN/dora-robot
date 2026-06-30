@@ -10,6 +10,7 @@ pub enum Channel {
     Feedback = 2,
     Telemetry = 3,
     Media = 4,
+    Episode = 5,
 }
 
 impl Channel {
@@ -23,6 +24,7 @@ impl Channel {
             2 => Some(Channel::Feedback),
             3 => Some(Channel::Telemetry),
             4 => Some(Channel::Media),
+            5 => Some(Channel::Episode),
             _ => None,
         }
     }
@@ -68,5 +70,25 @@ impl Qos {
             deadline_hz: None,
             priority: 255,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn channel_u8_roundtrip_includes_episode() {
+        for ch in [
+            Channel::Handshake,
+            Channel::Control,
+            Channel::Feedback,
+            Channel::Telemetry,
+            Channel::Media,
+            Channel::Episode,
+        ] {
+            assert_eq!(Channel::from_u8(ch.as_u8()), Some(ch));
+        }
+        assert_eq!(Channel::from_u8(6), None);
     }
 }

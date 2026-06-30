@@ -8,6 +8,7 @@
 pub mod capability;
 pub mod codec;
 pub mod command;
+pub mod episode;
 pub mod error;
 pub mod feedback;
 pub mod geometry;
@@ -16,6 +17,7 @@ pub mod header;
 pub use capability::{Capabilities, GripperSpec, Negotiated};
 pub use codec::{Codec, PlaceholderCodec};
 pub use command::{CartesianTarget, CommandBody, GripperCommand, JointTargets, TeleopCommand};
+pub use episode::{EpisodeEvent, EpisodeOutcome};
 pub use error::MessageError;
 pub use feedback::{
     EndEffectorState, FeedbackBody, HealthState, JointState, RobotFeedback, Status,

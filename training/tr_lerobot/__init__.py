@@ -15,4 +15,4 @@ lerobot is pinned here (see ``requirements.txt``); it is NOT vendored into the
 Rust workspace as a git submodule.
 """
 
-__all__ = ["schema", "recorder", "validate", "train"]
+__all__ = ["schema", "writer", "recorder", "validate", "train"]

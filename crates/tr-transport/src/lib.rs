@@ -8,10 +8,12 @@
 pub mod backends;
 pub mod error;
 pub mod framing;
+pub mod loopback;
 pub mod qos;
 pub mod transport;
 
 pub use error::TransportError;
 pub use framing::{FrameDecoder, FrameEncoder};
+pub use loopback::LoopbackTransport;
 pub use qos::{Channel, History, Qos, Reliability};
 pub use transport::{Inbound, LinkState, Transport};

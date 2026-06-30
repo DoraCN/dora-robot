@@ -1,23 +1,22 @@
-"""DORA Python node: record the teleop dataflow into a LeRobotDataset **v3.0**.
+"""DORA Python node: forward the teleop dataflow to lerobot (record a v3 dataset).
 
-Option B: this node drives lerobot's own v3 writer, so v3 conformance (chunked
-parquet, ``meta/episodes`` offset tables, ``finalize()`` footers, video sharding,
-stats) is guaranteed by construction. It consumes **plain Arrow** from the DORA
-dataflow and never decodes ``tr-messages``/``Codec``.
-
-Implements the Rust→DORA→LeRobot contract in
-``docs/so101-teleoperation-design.md`` §9 and the v3 facts verified in
-``docs/lerobot-dataset-v3-format.md``.
+**Boundary (only-transmit-data):** this node *acquires* arrays from the DORA
+dataflow and *hands them* to an injected :class:`EpisodeWriter` (production =
+lerobot). **Persistence / encoding / v3 layout is lerobot's domain, not this
+project** — see `docs/specs/001-so101-teleop-record/spec.md` §5/§6. It consumes
+**plain Arrow** and never decodes ``tr-messages``/``Codec``.
 
 Expected dataflow inputs (Arrow):
   - ``action``                   : Float32Array(dof)
   - ``observation_state``        : Float32Array(dof)
   - ``observation_images_<cam>`` : UInt8Array(H*W*3) flat HWC, metadata {width,height,encoding}
-  - ``episode_end``              : any  (marks an episode boundary)
+  - ``episode_end``              : episode boundary; metadata ``outcome`` ∈
+                                   {success, fail, rerecord} (forwarded by the
+                                   robot-side bridge; finalized in task F2)
 
-Frame clock: one dataset row per **primary-camera** frame (≈ dataset fps) so that
-``rows == fps × duration`` and there is exactly one video frame per row. The latest
-``action``/``observation_state`` are paired with each camera frame.
+Frame clock: one row per **primary-camera** frame (≈ dataset fps); with no camera
+the **action** stream drives it. Latest ``action``/``observation_state`` are
+paired with each frame.
 
 Config via env (set in the dataflow node ``env``):
   LEROBOT_REPO_ID, LEROBOT_ROOT, LEROBOT_FPS, LEROBOT_TASK, LEROBOT_ROBOT_TYPE,
@@ -33,6 +32,7 @@ import os
 import numpy as np
 
 from .schema import CameraSpec, DatasetSpec
+from .writer import EpisodeWriter, LerobotEpisodeWriter
 
 
 def _envbool(name: str, default: bool) -> bool:
@@ -88,6 +88,16 @@ def _event_metadata(event) -> dict:
         return {}
 
 
+def _episode_keep(event) -> bool:
+    """Decode the episode outcome forwarded by the robot-side bridge (task F2).
+
+    Convention (finalized in F2): ``metadata['outcome'] ∈ {success, fail,
+    rerecord}``. Defaults to *success* (keep) when absent.
+    """
+    outcome = str(_event_metadata(event).get("outcome", "success")).strip().lower()
+    return outcome not in {"fail", "failure", "rerecord", "discard"}
+
+
 class RecorderConfig:
     def __init__(self) -> None:
         self.repo_id = os.environ.get("LEROBOT_REPO_ID", "local/teleop")
@@ -119,29 +129,13 @@ class RecorderConfig:
 
 
 class Recorder:
-    def __init__(self, cfg: RecorderConfig) -> None:
-        # Imported lazily so the module imports (and py_compiles) without lerobot.
-        from lerobot.datasets import LeRobotDataset  # noqa: PLC0415
+    """Frame assembly + episode decisions. lerobot-free; testable with a spy writer."""
 
+    def __init__(self, cfg: RecorderConfig, writer: EpisodeWriter) -> None:
         self.cfg = cfg
+        self.writer = writer
         self.spec = cfg.spec()
         self._image_keys = self.spec.image_keys()
-
-        self.dataset = LeRobotDataset.create(
-            repo_id=cfg.repo_id,
-            fps=cfg.fps,
-            root=cfg.root,
-            robot_type=cfg.robot_type,
-            features=self.spec.features(),
-            use_videos=True,
-            # create() defaults streaming_encoding=False; the CLI defaults it True,
-            # so we set it explicitly (docs/recording-video-encoding-performance.md §1).
-            streaming_encoding=cfg.streaming_encoding,
-            encoder_threads=cfg.encoder_threads,
-            encoder_queue_maxsize=cfg.encoder_queue,
-            batch_encoding_size=cfg.batch_encoding,
-            # NOTE: to pick a (HW) codec pass rgb_encoder=RGBEncoderConfig(vcodec=...).
-        )
         self._latest: dict[str, np.ndarray] = {}
         self._frames_in_episode = 0
 
@@ -154,37 +148,53 @@ class Recorder:
         return all(k in self._latest for k in self._image_keys)
 
     def record_frame(self) -> None:
-        """Compose one dataset row from the latest values and append it."""
+        """Compose one dataset row from the latest values and hand it to the writer."""
         if not self._have_full_frame():
             return  # still warming up (no state / not all cameras seen yet)
         frame: dict = {
             "action": self._latest["action"],
             "observation.state": self._latest["observation.state"],
-            # v3.0: `task` is a KEY of the frame dict (dataset_writer.py:210 pops it),
-            # NOT a separate add_frame() kwarg.
+            # v3.0: `task` is a KEY of the frame dict (dataset_writer pops it).
             "task": self.cfg.task,
         }
         for key in self._image_keys:
             frame[key] = self._latest[key]  # (H, W, C) uint8 RGB
-        self.dataset.add_frame(frame)
+        self.writer.add_frame(frame)
         self._frames_in_episode += 1
 
-    def end_episode(self) -> None:
-        if self._frames_in_episode > 0:
-            self.dataset.save_episode()
-            self._frames_in_episode = 0
+    def end_episode(self, keep: bool = True) -> None:
+        """End the current episode: keep (success) → save; otherwise → discard."""
+        if self._frames_in_episode == 0:
+            return
+        if keep:
+            self.writer.save_episode()
+        else:
+            self.writer.discard()
+        self._frames_in_episode = 0
 
     def finalize(self) -> None:
-        self.end_episode()
-        # Mandatory in v3: flush buffered metadata + write parquet footers.
-        self.dataset.finalize()
+        # An episode still open at shutdown was never marked success → discard.
+        if self._frames_in_episode > 0:
+            self.writer.discard()
+            self._frames_in_episode = 0
+        self.writer.finalize()
 
 
 def main() -> None:
     from dora import Node  # noqa: PLC0415
 
     cfg = RecorderConfig()
-    rec = Recorder(cfg)
+    writer = LerobotEpisodeWriter(
+        cfg.spec(),
+        cfg.repo_id,
+        cfg.root,
+        cfg.robot_type,
+        streaming_encoding=cfg.streaming_encoding,
+        encoder_threads=cfg.encoder_threads,
+        encoder_queue=cfg.encoder_queue,
+        batch_encoding=cfg.batch_encoding,
+    )
+    rec = Recorder(cfg, writer)
     primary = cfg.primary_camera
     node = Node()
 
@@ -196,7 +206,7 @@ def main() -> None:
 
         input_id = event["id"]
         if input_id == "episode_end":
-            rec.end_episode()
+            rec.end_episode(keep=_episode_keep(event))
             continue
 
         if input_id == "action":
