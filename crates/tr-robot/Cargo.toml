@@ -1,0 +1,11 @@
+[package]
+name = "tr-robot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Robot tier: RobotDriver + Kinematics (FK/IK) traits, robot model, drivers."
+
+# Production: `urdf-rs` (model), `nalgebra` + `k`/TRAC-IK (kinematics),
+# vendor SDKs per robot, all behind features.
+[dependencies]
+tr-messages.workspace = true

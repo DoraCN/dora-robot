@@ -1,0 +1,10 @@
+[package]
+name = "tr-robot-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DORA node: bridge -> retarget/IK -> robot; feedback back."
+
+[dependencies]
+tr-robot.workspace = true
+tr-messages.workspace = true

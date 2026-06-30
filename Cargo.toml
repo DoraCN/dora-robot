@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tr-messages",
+    "crates/tr-transport",
+    "crates/tr-session",
+    "crates/tr-teleop",
+    "crates/tr-robot",
+    "crates/tr-teleop-node",
+    "crates/tr-robot-node",
+    "crates/tr-bridge",
+    "crates/tr-policy",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["dora-robot contributors"]
+repository = ""
+rust-version = "1.75"
+
+# NOTE (skeleton): the core crates are intentionally `std`-only so the whole
+# workspace compiles offline without fetching any registry dependency.
+# Production dependencies (serde, postcard/prost, nalgebra, dora-node-api,
+# tokio, zenoh, mcap, ...) are documented per-crate as `[TODO: add dep]`.
+[workspace.dependencies]
+tr-messages = { path = "crates/tr-messages" }
+tr-transport = { path = "crates/tr-transport" }
+tr-session = { path = "crates/tr-session" }
+tr-teleop = { path = "crates/tr-teleop" }
+tr-robot = { path = "crates/tr-robot" }

@@ -1,0 +1,13 @@
+[package]
+name = "tr-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pluggable transport abstraction (USB/WiFi/ETH/4G/5G/BLE/NearLink) with QoS + framing."
+
+# std-only: TCP/UDP backends are real. Production backends to add:
+#   serial/USB -> `serialport` or `nusb`
+#   Bluetooth  -> `btleplug`
+#   QUIC (4G/5G/WiFi) -> `quinn`
+#   NearLink   -> vendor SDK behind the `Transport` trait
+[dependencies]

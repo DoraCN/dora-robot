@@ -1,0 +1,10 @@
+[package]
+name = "tr-messages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Canonical, device- and robot-agnostic teleoperation message contract."
+
+# std-only skeleton. Production: add `serde` + a wire codec
+# (`prost`/`flatbuffers`/`postcard`) and feature-gate it.
+[dependencies]

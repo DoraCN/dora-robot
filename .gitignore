@@ -1,0 +1,20 @@
+# Rust build artifacts
+/target/
+
+# Third-party reference source (downloaded lerobot — NOT part of this project)
+/.leon/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Generated datasets / model checkpoints
+/datasets/
+/checkpoints/
+
+# Tooling / OS
+/.opencode/
+.DS_Store
+**/.DS_Store

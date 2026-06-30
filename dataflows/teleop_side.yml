@@ -1,0 +1,24 @@
+# Operator machine — teleoperation (no recording).
+#   teleop device --(canonical command)--> bridge --(transport)--> robot machine
+#   robot machine --(transport: feedback)--> bridge --> teleop device (haptics)
+#
+# Run: dora up && dora start dataflows/teleop_side.yml
+nodes:
+  - id: teleop
+    path: target/release/tr-teleop-node
+    inputs:
+      tick: dora/timer/millis/5        # ~200 Hz device poll
+      feedback: bridge/feedback        # force feedback to the master (bilateral)
+    outputs:
+      - command
+
+  - id: bridge
+    path: target/release/tr-bridge
+    inputs:
+      command: teleop/command
+    outputs:
+      - feedback                       # decoded from the robot over the transport
+    env:
+      TR_TRANSPORT: tcp                # tcp | udp | usb | ble | nearlink
+      TR_ROLE: client
+      TR_REMOTE: "192.168.1.50:9000"

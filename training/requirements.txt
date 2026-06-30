@@ -1,0 +1,10 @@
+# LeRobotDataset v3 requires lerobot >= 0.4.0.
+# Until 0.4.0 is published, the v3 docs pin this pre-release commit:
+lerobot @ https://github.com/huggingface/lerobot/archive/33cad37054c2b594ceba57463e8f11ee374fa93c.zip
+# When 0.4.0 ships on PyPI, replace the line above with:
+#   lerobot>=0.4.0
+
+# The recorder runs as a DORA Python node:
+dora-rs>=0.3
+pyarrow>=15
+numpy>=1.24

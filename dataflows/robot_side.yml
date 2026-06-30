@@ -1,0 +1,22 @@
+# Robot machine — receives canonical commands, runs IK/retargeting, drives robot.
+#
+# Run: dora up && dora start dataflows/robot_side.yml
+nodes:
+  - id: bridge
+    path: target/release/tr-bridge
+    inputs:
+      feedback: robot/feedback         # state + force feedback to send back
+    outputs:
+      - command                        # decoded canonical command from operator
+    env:
+      TR_TRANSPORT: tcp
+      TR_ROLE: server
+      TR_BIND: "0.0.0.0:9000"
+
+  - id: robot
+    path: target/release/tr-robot-node
+    inputs:
+      command: bridge/command
+      tick: dora/timer/millis/5        # ~200 Hz control loop
+    outputs:
+      - feedback

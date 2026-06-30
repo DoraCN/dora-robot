@@ -1,0 +1,13 @@
+[package]
+name = "tr-teleop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Teleop tier: device-agnostic TeleopDevice trait + device adapters."
+
+# Real adapters add deps behind features, e.g.:
+#   keyboard/gamepad -> `gilrs`
+#   vr               -> OpenXR bindings
+#   isomorphic_arm   -> the master arm's own SDK / serial driver
+[dependencies]
+tr-messages.workspace = true

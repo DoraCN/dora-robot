@@ -1,0 +1,11 @@
+[package]
+name = "tr-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DORA node: communication middleware bridging a dataflow to a Transport."
+
+[dependencies]
+tr-transport.workspace = true
+tr-session.workspace = true
+tr-messages.workspace = true

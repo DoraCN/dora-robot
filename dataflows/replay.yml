@@ -1,0 +1,23 @@
+# Robot machine — autonomous replay of a trained policy (human unplugged).
+# Demonstrates that the canonical command contract is the seam: tr-policy emits
+# exactly what the teleop tier would have.
+#
+# Run: dora up && dora start dataflows/replay.yml
+nodes:
+  - id: policy
+    path: target/release/tr-policy
+    inputs:
+      observation: robot/feedback
+      tick: dora/timer/millis/20       # ~50 Hz policy inference
+    outputs:
+      - command
+
+  - id: robot
+    path: target/release/tr-robot-node
+    inputs:
+      command: policy/command
+      tick: dora/timer/millis/5
+    outputs:
+      - feedback
+    env:
+      LEROBOT_POLICY: "./checkpoints/act_demo"

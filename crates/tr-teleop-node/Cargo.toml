@@ -1,0 +1,11 @@
+[package]
+name = "tr-teleop-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DORA node: teleop device -> canonical command -> bridge."
+
+# Real DORA wiring: add `dora-node-api`.
+[dependencies]
+tr-teleop.workspace = true
+tr-messages.workspace = true

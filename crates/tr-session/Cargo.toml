@@ -1,0 +1,9 @@
+[package]
+name = "tr-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Session lifecycle: capability handshake, heartbeat, RTT, reconnect/safe-state."
+
+[dependencies]
+tr-messages.workspace = true

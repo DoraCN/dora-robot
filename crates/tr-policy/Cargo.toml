@@ -1,0 +1,11 @@
+[package]
+name = "tr-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DORA node: replay a trained policy as canonical commands (no human in the loop)."
+
+# Production: load a LeRobot/torch policy (via tch / ort / python sidecar) and
+# infer actions from observations.
+[dependencies]
+tr-messages.workspace = true
