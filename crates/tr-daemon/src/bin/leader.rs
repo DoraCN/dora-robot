@@ -6,7 +6,7 @@ use tr_messages::control::ControlCommand;
 use tr_messages::{Codec, EpisodeOutcome};
 use tr_so101::config::So101Config;
 use tr_so101::resolver::{parse_hex_u16, resolve_arm_port, UsbDeviceConfig};
-use tr_so101::{FeetechBus, MotorBus, So101Arm, So101Leader};
+use tr_so101::{FeetechBus, So101Arm, So101Leader};
 use tr_teleop::TeleopDevice;
 use tr_transport::Transport;
 use tr_transport_zenoh::ZenohTransport;
@@ -30,7 +30,12 @@ fn main() -> anyhow::Result<()> {
         pid: parse_hex_u16(&config.arm.so101.pid)?,
         serial: config.arm.so101.serial.clone(),
     };
-    let port = resolve_arm_port(&device)?;
+    let cli_port = args.iter().position(|a| a == "--port")
+        .and_then(|i| args.get(i + 1).cloned());
+    let port = match cli_port {
+        Some(p) => p,
+        None => resolve_arm_port(&device)?,
+    };
     eprintln!("[leader] USB -> {port}");
 
     let rt_arm = tokio::runtime::Builder::new_multi_thread()

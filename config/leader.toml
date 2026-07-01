@@ -1,27 +1,19 @@
 # config/leader.toml — 主臂守护进程 + Web 控制台配置
 
 [arm]
-# 臂对标识 — 必须和从臂 follower.toml 中的 id 一致
 id = "arm_1"
+type = "so101"
 
-# Feetech 串口设备路径
-port = "/dev/cu.usbmodem5AB01836201"
-
-# 总线波特率
+[arm.so101]
 baud = 1_000_000
-
-# 舵机 ID 列表
 ids = [1, 2, 3, 4, 5, 6]
+vid = "0x1A86"
+pid = "0x55D3"
+serial = "5AB01836201"
 
 [zenoh]
-# 连接模式: "peer" (局域网自动发现) | "client" (连接指定路由)
 mode = "peer"
 
-# connect = ["tcp/192.168.1.1:7447"]
-
 [console]
-# Web 控制台监听地址（0.0.0.0 = 本机所有网卡，局域网可用）
 bind = "0.0.0.0"
-
-# Web 控制台端口
 port = 8080
