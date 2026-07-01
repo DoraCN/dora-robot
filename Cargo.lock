@@ -4711,6 +4711,7 @@ dependencies = [
  "tr-teleop",
  "tr-transport",
  "tr-transport-zenoh",
+ "zenoh",
 ]
 
 [[package]]

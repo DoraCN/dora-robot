@@ -1,58 +1,110 @@
 //! Zenoh → follower arm.
 //!
-//! Subscribes to a zenoh key expression, decodes incoming postcard-encoded
-//! `JointTargets`, and drives the follower SO-101 in a **tight recv loop**
-//! — every received frame is written to the servos immediately, with zero
-//! artificial delay.  Ctrl‑C to stop.
+//! Subscribes to a zenoh control key, decodes `JointTargets`, drives the
+//! SO-101 follower.  Optional `--record` mode outputs frames + episode events
+//! on stdout for the Python pipe recorder.
+//!
+//! --record stdout protocol:
+//!   D j1 j2 j3 j4 j5 j6     data frame (radians)
+//!   @START / @SUCCESS / @FAIL / @RERECORD / @STOP
 //!
 //! Usage:
-//!   cargo run -p tr-so101 --example zenoh_follower -- \
-//!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control]
+//!   # vanilla teleop
+//!   cargo run -p tr-so101 --example zenoh_follower -- /dev/cu.usbmodemxxx
+//!
+//!   # with recording
+//!   cargo run ... --record | python -m tr_lerobot.pipe_recorder
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
+use std::io::{self, BufWriter, Write};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tr_codec::PostcardCodec;
-use tr_messages::{Codec, CommandBody, TeleopCommand};
+use tr_messages::{Codec, CommandBody, EpisodeEvent, TeleopCommand};
 use tr_transport::Transport;
 use tr_transport_zenoh::ZenohTransport;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let port = args.get(1).cloned().unwrap_or_else(|| "/dev/cu.usbmodem5AB01836201".into());
-    let key = args.iter().position(|a| a == "--key")
+    let key_base = args.iter().position(|a| a == "--key")
         .and_then(|i| args.get(i + 1)).cloned()
-        .unwrap_or_else(|| "tr/csv/control".into());
+        .unwrap_or_else(|| "tr/csv".into());
+    let key_control = format!("{key_base}/control");
+    let key_episode = format!("{key_base}/episode");
+    let do_record = args.iter().any(|a| a == "--record");
 
     let ids: [u8; 6] = [1, 2, 3, 4, 5, 6];
     let codec = PostcardCodec;
 
-    println!("🔗 Opening zenoh subscriber on {key} ...");
+    if do_record {
+        eprintln!("  [zenoh_follower] record mode ON — stdout protocol");
+    }
+    eprintln!("  keys: {key_control} / {key_episode}");
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_io()
-        .enable_time()
-        .build()?;
+        .worker_threads(1).enable_io().enable_time().build()?;
 
-    let mut transport = ZenohTransport::subscriber(rt.handle(), &key)?;
+    // Control subscription.
+    let mut transport_ctrl = ZenohTransport::subscriber(rt.handle(), &key_control)?;
+
+    // Episode subscription (raw zenoh session, separate from control).
+    let (ep_tx, ep_rx) = mpsc::channel::<EpisodeEvent>();
+    if do_record {
+        let session = rt.block_on(async {
+            zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+        })?;
+        rt.block_on(async {
+            session.declare_subscriber(key_episode.as_str())
+                .callback({
+                    let codec = PostcardCodec;
+                    let tx = ep_tx.clone();
+                    move |sample| {
+                        let payload = sample.payload().to_bytes().to_vec();
+                        if let Ok(ev) = codec.decode_episode(&payload) {
+                            let _ = tx.send(ev);
+                        }
+                    }
+                })
+                .await.map_err(|e| anyhow::anyhow!("{e}"))
+        })?;
+    }
+
+    // Output pipe.
+    let mut stdout: Option<BufWriter<io::Stdout>> = if do_record {
+        Some(BufWriter::new(io::stdout()))
+    } else {
+        None
+    };
 
     let result = rt.block_on(async {
-        println!("🔗 Opening follower on {port} ...");
+        eprintln!("🔗 follower on {port} ...");
         let mut bus = FeetechBus::new(&port, 1_000_000)?;
         bus.enable_torque(&ids).await?;
-        println!("   torque: ON\n");
+        eprintln!("   torque: ON\n");
 
         let mut first = true;
         let mut count = 0u64;
         let mut last_written_pos = [0.0_f32; 6];
         let mut last_write = Instant::now();
-        const DEDUP_THRESH: f32 = 0.002;  // ~0.11° — skip if all joints unchanged
-        const MIN_WRITE_DT: Duration = Duration::from_millis(25); // ~40Hz, matches servo PID tracking
+        const DEDUP_THRESH: f32 = 0.002;
+        const MIN_WRITE_DT: Duration = Duration::from_millis(25);
 
         loop {
-            // Tight recv loop — no rate limit, no select, no sleeps between
-            // frames.  1 ms timeout yields the CPU when the link is idle.
-            if let Ok(Some(inbound)) = transport.recv(Duration::from_millis(1)) {
+            // Drain episode events.
+            while let Ok(ev) = ep_rx.try_recv() {
+                if let Some(ref mut w) = stdout {
+                    let line = match ev {
+                        EpisodeEvent::Start => "@START",
+                        EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Success } => "@SUCCESS",
+                        EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Fail } => "@FAIL",
+                        EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Rerecord } => "@RERECORD",
+                    };
+                    writeln!(w, "{line}")?;
+                }
+            }
+
+            if let Ok(Some(inbound)) = transport_ctrl.recv(Duration::from_millis(1)) {
                 let cmd: TeleopCommand = codec.decode_command(&inbound.frame)
                     .map_err(|e| anyhow::anyhow!("{e}"))?;
                 let joint_rad: Vec<f32> = match &cmd.body {
@@ -61,14 +113,19 @@ fn main() -> anyhow::Result<()> {
                 };
                 if joint_rad.len() < 6 { continue; }
 
-                // Dedup: skip write if all joints unchanged (prevents PID restart jitter).
+                // ── recording pipe ─────────────────────────────
+                if let Some(ref mut w) = stdout {
+                    write!(w, "D")?;
+                    for v in &joint_rad { write!(w, " {:.6}", v)?; }
+                    writeln!(w)?;
+                }
+                // ───────────────────────────────────────────────
+
                 if !first {
                     let max_d = joint_rad.iter().zip(last_written_pos.iter())
-                        .map(|(a, b)| (a - b).abs())
-                        .fold(0.0_f32, f32::max);
+                        .map(|(a,b)| (a-b).abs()).fold(0.0_f32, f32::max);
                     if max_d < DEDUP_THRESH { continue; }
                 }
-                // Rate limit: match servo PID tracking capability (~40Hz).
                 if !first {
                     let elapsed = last_write.elapsed();
                     if elapsed < MIN_WRITE_DT {
@@ -80,8 +137,7 @@ fn main() -> anyhow::Result<()> {
 
                 let cmds: Vec<(u8, ControlOp)> = ids.iter()
                     .zip(joint_rad.iter())
-                    .map(|(&id, &p)| (id, ControlOp::Position(p)))
-                    .collect();
+                    .map(|(&id, &p)| (id, ControlOp::Position(p))).collect();
 
                 if first {
                     bus.sync_write_goals(&cmds).await?;
@@ -92,9 +148,8 @@ fn main() -> anyhow::Result<()> {
                         eprintln!("[warn] write error @ frame {count}: {e}");
                     }
                 }
-
                 if count < 20 || count % 50 == 0 {
-                    println!("[play] frame={:>4}  j1={:>7.1}°", count, joint_rad[0] * 57.2958);
+                    eprintln!("[play] frame={:>4}  j1={:>7.1}°", count, joint_rad[0] * 57.2958);
                 }
                 count += 1;
             }
@@ -103,7 +158,10 @@ fn main() -> anyhow::Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    drop(transport);
+    if let Some(mut w) = stdout {
+        let _ = writeln!(w, "@STOP");
+        let _ = w.flush();
+    }
     result?;
     Ok(())
 }

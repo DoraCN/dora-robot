@@ -1,117 +1,111 @@
-//! Real SO-101 leader → zenoh publisher (live teleop sender).
+//! Real SO-101 leader → zenoh publisher (live teleop sender)
+//! + keyboard episode control.
 //!
-//! Connects to the leader arm, disables torque (backdrivable), reads joint
-//! positions at bus speed (~45 Hz), and publishes postcard-encoded
-//! `JointTargets` over zenoh.  Optionally also writes a local CSV for
-//! recording/debug.  Ctrl‑C to stop.
-//!
-//! Two **separate** tokio runtimes isolate the serial bus from zenoh I/O.
+//! Keyboard controls (press key then Enter):
+//!   s      Start episode
+//!   (Enter) End — Success (save)
+//!   f      End — Fail (discard)
+//!   r      End — Rerecord (discard, keep recording)
+//!   q      Quit (stop publishing)
 //!
 //! Usage:
-//!   cargo run -p tr-so101 --example leader_teleop_zenoh -- \
-//!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control] [--output logs/session.csv]
+//!   cargo run -p tr-so101 --example leader_teleop_zenoh -- /dev/cu.usbmodem5AB01836201
 
 use feetech_servo_sdk::{FeetechBus, MotorBus};
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::io::{self, BufRead, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tr_codec::PostcardCodec;
-use tr_messages::{
-    Codec, CommandBody, ControlMode, JointTargets, MessageHeader, TeleopCommand,
-};
+use tr_messages::{Codec, CommandBody, ControlMode, EpisodeEvent, EpisodeOutcome,
+    JointTargets, MessageHeader, TeleopCommand};
 use tr_transport::qos::Channel;
 use tr_transport::Transport;
 use tr_transport_zenoh::ZenohTransport;
 
-fn now_nanos() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0)
-}
-
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let port = args.get(1).cloned()
-        .unwrap_or_else(|| "/dev/cu.usbmodem5AB01836201".into());
-    let key = args.iter().position(|a| a == "--key")
+    let port = args.get(1).cloned().unwrap_or_else(|| "/dev/cu.usbmodem5AB01836201".into());
+    let key_base = args.iter().position(|a| a == "--key")
         .and_then(|i| args.get(i + 1)).cloned()
-        .unwrap_or_else(|| "tr/csv/control".into());
-    let csv_path: Option<PathBuf> = args.iter().position(|a| a == "--output")
-        .and_then(|i| args.get(i + 1)).map(PathBuf::from);
+        .unwrap_or_else(|| "tr/csv".into());
+    let key_control = format!("{key_base}/control");
+    let key_episode = format!("{key_base}/episode");
 
     let ids: [u8; 6] = [1, 2, 3, 4, 5, 6];
     let codec = PostcardCodec;
 
     println!("────────────────────────────────────────────");
     println!("  LEADER → ZENOH  (live teleop)");
-    println!("  port    : {port}");
-    println!("  key     : {key}");
-    if let Some(ref p) = csv_path { println!("  csv     : {}", p.display()); }
-    println!("  Ctrl‑C to stop");
+    println!("  port   : {port}");
+    println!("  keys   : {key_control} / {key_episode}");
+    println!("  [s]tart  [Enter]success  [f]ail  [r]erecord  [q]uit");
     println!("────────────────────────────────────────────");
 
-    // -- Two separate runtimes — zenoh and serial bus do not share IO drivers ----
     let rt_zenoh = tokio::runtime::Runtime::new()?;
-
-    println!("🔗 Opening zenoh publisher on {key} ...");
-    let mut transport = ZenohTransport::publisher(rt_zenoh.handle(), &key)?;
-
-    // Serial bus gets its own runtime — same proven pattern as leader_diag.
     let rt_arm = tokio::runtime::Runtime::new()?;
-    let _guard = rt_arm.enter();
 
-    println!("🔗 Opening leader on {port} ...");
+    println!("🔗 zenoh publishers ...");
+    let mut transport_ctrl = ZenohTransport::publisher(rt_zenoh.handle(), &key_control)?;
+    let mut transport_ep = ZenohTransport::publisher(rt_zenoh.handle(), &key_episode)?;
+
+    // Keyboard thread → reads stdin lines, publishes episode events.
+    let quit = Arc::new(AtomicBool::new(false));
+    let quit2 = quit.clone();
+    std::thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut msg = String::new();
+        loop {
+            msg.clear();
+            if stdin.lock().read_line(&mut msg).is_err() { break; }
+            let ch = msg.trim().to_lowercase();
+            let event = match ch.as_str() {
+                "s" => Some(EpisodeEvent::Start),
+                "" | "\n" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Success }),
+                "f" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Fail }),
+                "r" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Rerecord }),
+                "q" => { quit2.store(true, Ordering::SeqCst); break; }
+                _ => { println!("  ? {ch}"); continue; }
+            };
+            if let Some(ev) = event {
+                let encoded = PostcardCodec.encode_episode(&ev);
+                if let Ok(bytes) = encoded {
+                    let _ = transport_ep.send(Channel::Episode, &bytes);
+                    eprintln!("  → {ev:?}");
+                }
+            }
+        }
+    });
+
+    // Arm read loop.
+    let _guard = rt_arm.enter();
+    println!("🔗 leader on {port} ...");
     let mut bus = FeetechBus::new(&port, 1_000_000)?;
     rt_arm.block_on(async { bus.disable_torque(&ids).await })?;
-    println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
-
-    // Optional CSV
-    let mut csv: Option<BufWriter<File>> = csv_path
-        .as_ref()
-        .map(|p| BufWriter::new(File::create(p).expect("create csv")));
-    if csv.is_some() {
-        writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
-    }
+    println!("   torque: OFF\n▶  Publishing (keyboard for episode control)\n");
 
     let mut seq: u64 = 0;
-    let mut last_positions = [0.0_f32; 6];
+    let mut last = [0.0_f32; 6];
     loop {
+        if quit.load(Ordering::SeqCst) { break; }
         std::thread::sleep(Duration::from_millis(1));
         let positions = match rt_arm.block_on(async { bus.sync_read_positions(&ids).await }) {
-            Ok(p) => {
-                last_positions.copy_from_slice(&p);
-                p
-            }
-            Err(e) => {
-                eprintln!("[warn] read error (using last): {e}");
-                last_positions.to_vec() // fall back to last known good
-            }
+            Ok(p) => { last.copy_from_slice(&p); p }
+            Err(e) => { eprintln!("[warn] read: {e}"); last.to_vec() }
         };
-        let stamp = now_nanos();
-
         let cmd = TeleopCommand {
             header: MessageHeader::new(0, "leader", ControlMode::JointTargets),
             body: CommandBody::Joint(JointTargets {
                 positions: positions.iter().map(|&p| p as f64).collect(),
-                velocities: None,
-                efforts: None,
+                velocities: None, efforts: None,
             }),
         };
-        let encoded = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
-        transport.send(Channel::Control, &encoded)?;
-
-        if let Some(ref mut w) = csv {
-            write!(w, "{seq} {stamp}")?;
-            for &p in &positions { write!(w, " {:.6}", p)?; }
-            writeln!(w)?;
-        }
-
+        let bytes = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
+        transport_ctrl.send(Channel::Control, &bytes)?;
         seq += 1;
-        if seq % 100 == 0 {
-            print!("\r   frames: {seq}");
-            let _ = std::io::stdout().flush();
-        }
+        if seq % 100 == 0 { print!("\r   frames: {seq}"); let _ = io::stdout().flush(); }
     }
+
+    println!("\n👋 leader stopped.");
+    Ok(())
 }
