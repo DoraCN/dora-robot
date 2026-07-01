@@ -4,7 +4,7 @@
 //! as a postcard-encoded `JointTargets`.  Runs on the sender machine (no arm).
 //!
 //! Usage:
-//!   cargo run -p tr-so101 --example csv_publisher -- [logs/leader_latest.csv]
+//!   cargo run -p tr-so101 --example csv_publisher -- [logs/leader_latest.csv] [--key tr/csv/control]
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -31,14 +31,19 @@ fn parse_csv(path: &str) -> anyhow::Result<Vec<(u64, [f32; 6])>> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let csv = std::env::args().nth(1).unwrap_or_else(|| "logs/leader_latest.csv".into());
+    let args: Vec<String> = std::env::args().collect();
+    let csv = args.get(1).cloned().unwrap_or_else(|| "logs/leader_latest.csv".into());
+    let key = args.iter().position(|a| a == "--key")
+        .and_then(|i| args.get(i + 1)).cloned()
+        .unwrap_or_else(|| "tr/csv/control".into());
+
     println!("📂 Loading {} ...", csv);
     let frames = parse_csv(&csv)?;
     println!("   {} frames loaded.", frames.len());
     if frames.is_empty() { anyhow::bail!("empty CSV"); }
 
-    println!("🔗 Connecting zenoh publisher ...");
-    let mut transport = ZenohTransport::publisher("tr/csv/control")?;
+    println!("🔗 Connecting zenoh publisher on {key} ...");
+    let mut transport = ZenohTransport::publisher(&key)?;
     let codec = PostcardCodec;
 
     let t0 = Instant::now();
