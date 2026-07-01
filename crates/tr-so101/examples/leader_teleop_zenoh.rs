@@ -56,8 +56,9 @@ fn main() -> anyhow::Result<()> {
 
     // -- Leader arm ----------------------------------------------------------
     println!("🔗 Opening leader on {port} ...");
+    let rt = tokio::runtime::Runtime::new()?;
     let mut bus = FeetechBus::new(&port, 1_000_000)?;
-    bus.disable_torque(&ids).await?;
+    rt.block_on(async { bus.disable_torque(&ids).await })?;
     println!("   torque: OFF (backdrivable)");
 
     // -- Zenoh ----------------------------------------------------------------
@@ -73,7 +74,6 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("\n▶  Publishing (Ctrl‑C to stop)\n");
-    let rt = tokio::runtime::Runtime::new()?;
     let mut seq: u64 = 0;
     let _t0 = Instant::now();
 
