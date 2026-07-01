@@ -35,10 +35,19 @@ def main() -> None:
     height = int(_env("TR_CAMERA_HEIGHT", "480"))
     target_fps = float(_env("TR_CAMERA_FPS", "30"))
 
-    if camera_id.isdigit():
-        cap = cv2.VideoCapture(int(camera_id))
-    else:
+    # Attempt by index first (most reliable on macOS)
+    # Unique ID support: parse "id:<value>" to look up by USB resolver output
+    if camera_id.startswith("id:"):
+        camera_id = camera_id[3:]
+
+    try:
+        idx = int(camera_id)
+        cap = cv2.VideoCapture(idx)
+    except ValueError:
         cap = cv2.VideoCapture(camera_id)
+        if not cap.isOpened():
+            # fallback to index 0
+            cap = cv2.VideoCapture(0)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)

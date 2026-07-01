@@ -33,11 +33,21 @@ fn main() -> eyre::Result<()> {
     let codec = PostcardCodec;
 
     let k_ctrl = format!("tr/{arm_id}/control");
-    let k_obs  = format!("tr/{arm_id}/observation");
-    let k_cmd  = format!("tr/{arm_id}/command");
+    let k_obs = format!("tr/{arm_id}/observation");
+    let k_cmd = format!("tr/{arm_id}/command");
 
-    handle.spawn(run_control_subscriber(k_ctrl, tx.clone(), codec, handle.clone()));
-    handle.spawn(run_observation_subscriber(k_obs, tx.clone(), codec, handle.clone()));
+    handle.spawn(run_control_subscriber(
+        k_ctrl,
+        tx.clone(),
+        codec,
+        handle.clone(),
+    ));
+    handle.spawn(run_observation_subscriber(
+        k_obs,
+        tx.clone(),
+        codec,
+        handle.clone(),
+    ));
     handle.spawn(run_command_subscriber(k_cmd, tx, codec, handle.clone()));
 
     let (mut node, mut events) = DoraNode::init_from_env()?;
@@ -92,7 +102,11 @@ async fn run_control_subscriber(
     handle: tokio::runtime::Handle,
 ) {
     let mut sub = match ZenohTransport::subscriber(&handle, &key) {
-        Ok(s) => s, Err(e) => { eprintln!("capture ctrl: {e}"); return; }
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("capture ctrl: {e}");
+            return;
+        }
     };
     loop {
         match Transport::recv(&mut sub, Duration::from_millis(5)) {
@@ -117,7 +131,11 @@ async fn run_observation_subscriber(
     handle: tokio::runtime::Handle,
 ) {
     let mut sub = match ZenohTransport::subscriber(&handle, &key) {
-        Ok(s) => s, Err(e) => { eprintln!("capture obs: {e}"); return; }
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("capture obs: {e}");
+            return;
+        }
     };
     loop {
         match Transport::recv(&mut sub, Duration::from_millis(5)) {
@@ -139,7 +157,11 @@ async fn run_command_subscriber(
     handle: tokio::runtime::Handle,
 ) {
     let mut sub = match ZenohTransport::subscriber(&handle, &key) {
-        Ok(s) => s, Err(e) => { eprintln!("capture cmd: {e}"); return; }
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("capture cmd: {e}");
+            return;
+        }
     };
     loop {
         match Transport::recv(&mut sub, Duration::from_millis(5)) {
@@ -147,8 +169,9 @@ async fn run_command_subscriber(
                 if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                     let msg = match cmd {
                         ControlCommand::StartRecord { task } => Captured::EpisodeStart { task },
-                        ControlCommand::EndRecord { outcome } =>
-                            Captured::EpisodeEnd(format!("{:?}", outcome)),
+                        ControlCommand::EndRecord { outcome } => {
+                            Captured::EpisodeEnd(format!("{:?}", outcome))
+                        }
                         ControlCommand::ReRecord => Captured::EpisodeReRecord,
                         ControlCommand::Stop => Captured::EpisodeStop,
                         _ => continue,
