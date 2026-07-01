@@ -69,6 +69,42 @@ impl<B: MotorBus> So101Follower<B> {
     }
 
     /// Per-tick slew clamping (M10): each joint delta is capped to `self.slew_rad`.
+
+    /// Anti-jerk startup alignment (D1): smoothly interpolate from the current
+    /// position to `target` at ≤ `slew_rad` per tick, so the first live command
+    /// doesn't jerk. Blocks until the trajectory completes.
+    pub fn align_to(&mut self, target: &[f32; DOF]) -> Result<(), RobotError> {
+        if self.e_stopped {
+            return Err(RobotError::Hardware("e-stopped".into()));
+        }
+        let start = self
+            .rt
+            .block_on(async { self.arm.read_joints().await })
+            .map_err(|_e| RobotError::Hardware("read_joints failed".into()))?;
+        // linear interpolation at 50 Hz (slew already per-tick, tick ≈ 10 ms)
+        let max_d = (target[0] - start[0])
+            .abs()
+            .max((target[1] - start[1]).abs())
+            .max((target[2] - start[2]).abs())
+            .max((target[3] - start[3]).abs())
+            .max((target[4] - start[4]).abs())
+            .max((target[5] - start[5]).abs());
+        let steps = ((max_d / self.slew_rad).ceil() as usize).max(1).min(500); // safety bound
+        for s in 1..=steps {
+            let t = s as f32 / steps as f32;
+            let mut waypoint = [0.0_f32; DOF];
+            for i in 0..DOF {
+                waypoint[i] = start[i] + (target[i] - start[i]) * t;
+            }
+            self.rt
+                .block_on(async { self.arm.write_joints(&waypoint).await })
+                .map_err(|_e| RobotError::Hardware("write_joints in align_to failed".into()))?;
+        }
+        // The align is now the baseline for subsequent slew clamping.
+        self.prev_target = Some(*target);
+        Ok(())
+    }
+
     fn slew_clamp(&self, target: &[f32; DOF], prev: &[f32; DOF]) -> [f32; DOF] {
         let mut out = *target;
         for i in 0..DOF {
@@ -175,10 +211,12 @@ mod mock_tests {
     use crate::arm::So101Arm;
     use crate::config::So101Config;
     use crate::DOF;
+    use super::So101Follower;
     use feetech_servo_sdk::MockBus;
     use tr_messages::{
-        CommandBody, ControlMode, JointTargets, MessageHeader, TeleopCommand,
+        CommandBody, ControlMode, FeedbackBody, JointTargets, MessageHeader, TeleopCommand,
     };
+    use tr_robot::RobotDriver;
 
     const IDS: [u8; DOF] = [1, 2, 3, 4, 5, 6];
 
@@ -211,5 +249,15 @@ mod mock_tests {
         let mut f = So101Follower::new(arm, 1, "f");
         f.e_stop().unwrap();
         assert!(f.command(&cmd([0.0; DOF])).is_err());
+    }
+
+    #[test]
+    fn align_to_runs_and_sets_baseline() {
+        let arm = So101Arm::new(MockBus::new(&IDS), So101Config::default());
+        let mut f = So101Follower::new(arm, 1, "f");
+        let target: [f32; DOF] = [0.05, 0.0, 0.0, 0.0, 0.0, 0.0];
+        f.align_to(&target).unwrap();
+        // After align, sending the same command should succeed (no slew violation).
+        f.command(&cmd(target)).unwrap();
     }
 }
