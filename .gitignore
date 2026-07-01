@@ -18,3 +18,5 @@ __pycache__/
 /.opencode/
 .DS_Store
 **/.DS_Store
+
+/logs
