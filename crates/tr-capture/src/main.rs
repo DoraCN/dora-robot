@@ -94,15 +94,21 @@ fn main() -> eyre::Result<()> {
 
     let (mut node, mut events) = DoraNode::init_from_env()?;
 
+    let mut last_send = std::time::Instant::now();
+    let send_interval = std::time::Duration::from_millis(33); // ~30 Hz
+
     loop {
         // Pump DORA events and drain our mpsc channel
         while let Ok(msg) = rx.try_recv() {
             match msg {
                 Captured::Action(a) => {
+                    if last_send.elapsed() < send_interval { continue; }
                     node.send_output("action".into(), Default::default(), Float32Array::from(a))?;
                 }
                 Captured::Observation(o) => {
+                    if last_send.elapsed() < send_interval { continue; }
                     node.send_output("observation_state".into(), Default::default(), Float32Array::from(o))?;
+                    last_send = std::time::Instant::now();
                 }
                 Captured::EpisodeStart { task } => {
                     let json = format!(r#"{{"cmd":"StartRecord","task":"{}"}}"#, task);
