@@ -5,6 +5,8 @@
 //! `JointTargets` over zenoh.  Optionally also writes a local CSV for
 //! recording/debug.  Ctrl‑C to stop.
 //!
+//! Two **separate** tokio runtimes isolate the serial bus from zenoh I/O.
+//!
 //! Usage:
 //!   cargo run -p tr-so101 --example leader_teleop_zenoh -- \
 //!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control] [--output logs/session.csv]
@@ -50,20 +52,19 @@ fn main() -> anyhow::Result<()> {
     println!("  Ctrl‑C to stop");
     println!("────────────────────────────────────────────");
 
-    // -- Single runtime shared by zenoh and the serial bus --------------------
-    let rt = tokio::runtime::Runtime::new()?;
+    // -- Two separate runtimes — zenoh and serial bus do not share IO drivers ----
+    let rt_zenoh = tokio::runtime::Runtime::new()?;
 
-    // Zenoh transport (created before rt.enter(), same as diag pattern).
     println!("🔗 Opening zenoh publisher on {key} ...");
-    let mut transport = ZenohTransport::publisher(rt.handle(), &key)?;
+    let mut transport = ZenohTransport::publisher(rt_zenoh.handle(), &key)?;
 
-    // Enter the runtime permanently so FeetechBus::new() + per-read block_on
-    // work exactly like the proven leader_diag example.
-    let _guard = rt.enter();
+    // Serial bus gets its own runtime — same proven pattern as leader_diag.
+    let rt_arm = tokio::runtime::Runtime::new()?;
+    let _guard = rt_arm.enter();
 
     println!("🔗 Opening leader on {port} ...");
     let mut bus = FeetechBus::new(&port, 1_000_000)?;
-    rt.block_on(async { bus.disable_torque(&ids).await })?;
+    rt_arm.block_on(async { bus.disable_torque(&ids).await })?;
     println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
 
     // Optional CSV
@@ -76,10 +77,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut seq: u64 = 0;
     loop {
-        // Yield briefly so Ctrl‑C can be detected.
         std::thread::sleep(Duration::from_millis(1));
-
-        let positions = rt.block_on(async { bus.sync_read_positions(&ids).await })?;
+        let positions = rt_arm.block_on(async { bus.sync_read_positions(&ids).await })?;
         let stamp = now_nanos();
 
         let cmd = TeleopCommand {
