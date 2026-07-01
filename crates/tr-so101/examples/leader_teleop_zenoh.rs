@@ -64,7 +64,10 @@ fn main() -> anyhow::Result<()> {
                 "" | "\n" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Success }),
                 "f" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Fail }),
                 "r" => Some(EpisodeEvent::End { outcome: EpisodeOutcome::Rerecord }),
-                "q" => { quit2.store(true, Ordering::SeqCst); break; }
+                "q" => {
+                    let _ = PostcardCodec.encode_episode(&EpisodeEvent::Stop).map(|b| transport_ep.send(Channel::Episode, &b));
+                    quit2.store(true, Ordering::SeqCst); break;
+                }
                 _ => { println!("  ? {ch}"); continue; }
             };
             if let Some(ev) = event {

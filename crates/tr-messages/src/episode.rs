@@ -35,6 +35,8 @@ pub enum EpisodeEvent {
     Start,
     /// End the current episode with an outcome.
     End { outcome: EpisodeOutcome },
+    /// End the entire recording session (follower disables torque + exits).
+    Stop,
 }
 
 #[cfg(test)]

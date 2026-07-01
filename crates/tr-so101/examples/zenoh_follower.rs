@@ -90,6 +90,8 @@ fn main() -> anyhow::Result<()> {
         const DEDUP_THRESH: f32 = 0.002;
         const MIN_WRITE_DT: Duration = Duration::from_millis(25);
 
+        let mut should_stop = false;
+
         loop {
             // Drain episode events.
             while let Ok(ev) = ep_rx.try_recv() {
@@ -99,11 +101,15 @@ fn main() -> anyhow::Result<()> {
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Success } => "@SUCCESS",
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Fail } => "@FAIL",
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Rerecord } => "@RERECORD",
+                        EpisodeEvent::Stop => "@STOP",
                     };
+                    let is_stop = matches!(ev, EpisodeEvent::Stop);
                     writeln!(stdout, "{line}")?;
                     stdout.flush()?;
+                    if is_stop { should_stop = true; }
                 }
             }
+            if should_stop { break; }
 
             if let Ok(Some(inbound)) = transport_ctrl.recv(Duration::from_millis(1)) {
                 let cmd: TeleopCommand = codec.decode_command(&inbound.frame)
