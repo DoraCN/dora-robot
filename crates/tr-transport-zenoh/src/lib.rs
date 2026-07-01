@@ -41,7 +41,10 @@ impl ZenohTransport {
         let key2 = key.clone();
         handle.spawn(async move {
             while let Ok(payload) = rx.recv() {
-                let _ = session2.put(key2.as_str(), payload).await;
+                let _ = session2
+                    .put(key2.as_str(), payload)
+                    .congestion_control(zenoh::qos::CongestionControl::Drop)
+                    .await;
             }
         });
 
