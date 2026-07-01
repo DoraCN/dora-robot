@@ -37,10 +37,14 @@ impl ZenohTransport {
         let key2 = key.clone();
         handle.spawn(async move {
             while let Ok(payload) = rx.recv() {
-                let _ = session2.put(key2.as_str(), payload)
+                match session2.put(key2.as_str(), payload)
                     .congestion_control(zenoh::qos::CongestionControl::Drop)
-                    .await;
+                    .await {
+                    Ok(_) => {}
+                    Err(e) => eprintln!("[zenoh-pub] put error: {e}"),
+                }
             }
+            eprintln!("[zenoh-pub] channel closed");
         });
 
         Ok(Self {
@@ -60,6 +64,7 @@ impl ZenohTransport {
                 .declare_subscriber(key.as_str())
                 .callback(move |sample| {
                     let payload = sample.payload().to_bytes().to_vec();
+                    eprintln!("[zenoh-sub] rx {} bytes on {}", payload.len(), sample.key_expr());
                     let _ = tx.send((Channel::Control, payload));
                 })
                 .await
