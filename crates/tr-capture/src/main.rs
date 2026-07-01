@@ -64,20 +64,20 @@ fn main() -> eyre::Result<()> {
                 Captured::EpisodeStart { task } => {
                     let json = format!(r#"{{"cmd":"StartRecord","task":"{}"}}"#, task);
                     let b = json.into_bytes();
-                    node.send_output_bytes("episode_cmd".into(), Default::default(), b.len(), &b)?;
+                    node.send_output_bytes("episode_end".into(), Default::default(), b.len(), &b)?;
                 }
                 Captured::EpisodeEnd(outcome) => {
                     let json = format!(r#"{{"cmd":"EndRecord","outcome":"{}"}}"#, outcome);
                     let b = json.into_bytes();
-                    node.send_output_bytes("episode_cmd".into(), Default::default(), b.len(), &b)?;
+                    node.send_output_bytes("episode_end".into(), Default::default(), b.len(), &b)?;
                 }
                 Captured::EpisodeReRecord => {
                     let b = br#"{"cmd":"ReRecord"}"#;
-                    node.send_output_bytes("episode_cmd".into(), Default::default(), b.len(), b)?;
+                    node.send_output_bytes("episode_end".into(), Default::default(), b.len(), b)?;
                 }
                 Captured::EpisodeStop => {
                     let b = br#"{"cmd":"Stop"}"#;
-                    node.send_output_bytes("episode_cmd".into(), Default::default(), b.len(), b)?;
+                    node.send_output_bytes("episode_end".into(), Default::default(), b.len(), b)?;
                 }
             }
         }

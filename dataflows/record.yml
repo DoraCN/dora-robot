@@ -4,9 +4,25 @@ nodes:
     outputs:
       - action
       - observation_state
-      - episode_cmd
+      - episode_end
     env:
       TR_ARM_ID: "${TR_ARM_ID:-arm_1}"
+
+  - id: camera_front
+    path: training/.venv/bin/python
+    args: -m tr_lerobot.camera_node
+    outputs:
+      - image
+    env:
+      TR_CAMERA_ID: "0x2122000046d082d"
+
+  - id: camera_wrist
+    path: training/.venv/bin/python
+    args: -m tr_lerobot.camera_node
+    outputs:
+      - image
+    env:
+      TR_CAMERA_ID: "0x2121000046d082d"
 
   - id: recorder
     path: training/.venv/bin/python
@@ -14,10 +30,13 @@ nodes:
     inputs:
       action: capture/action
       observation_state: capture/observation_state
-      episode_cmd: capture/episode_cmd
+      episode_end: capture/episode_end
+      observation_images_front: camera_front/image
+      observation_images_wrist: camera_wrist/image
     env:
       PYTHONPATH: "training"
       LEROBOT_REPO_ID: "local/teleop"
       LEROBOT_ROOT: "./datasets"
       LEROBOT_FPS: "30"
       LEROBOT_TASK: "${TR_TASK:-teleop}"
+      TR_CAMERAS: "front:480x640,wrist:480x640"
