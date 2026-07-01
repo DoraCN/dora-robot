@@ -5,7 +5,6 @@ use tr_transport::error::TransportError;
 use tr_transport::qos::Channel;
 use tr_transport::transport::{Inbound, LinkState, Transport};
 
-#[allow(dead_code)]
 enum Role { Pub, Sub }
 
 pub struct ZenohTransport {
@@ -22,27 +21,26 @@ struct KeepAlive {
     sub: Option<Box<dyn std::any::Any + Send>>,
 }
 
+fn no_batch_config() -> anyhow::Result<zenoh::Config> {
+    let mut c = zenoh::Config::default();
+    c.insert_json5("transport/link/tx/batch_size", "1")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(c)
+}
+
 impl ZenohTransport {
-    /// Create a PUBLISHING endpoint.
-    ///
-    /// A background task is spawned on `handle` that drains an internal MPSC
-    /// channel and publishes each payload to zenoh.  `send()` pushes to that
-    /// internal channel — **no `block_on`** — so `send` can be called from
-    /// inside or outside a runtime without nesting.
     pub fn publisher(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
         let key = key_expr.into();
         let session = handle.block_on(async {
-            zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+            zenoh::open(no_batch_config()?).await.map_err(|e| anyhow::anyhow!("{e}"))
         })?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
-        // Spawn the background publisher drain.
         let session2 = session.clone();
         let key2 = key.clone();
         handle.spawn(async move {
             while let Ok(payload) = rx.recv() {
-                let _ = session2
-                    .put(key2.as_str(), payload)
+                let _ = session2.put(key2.as_str(), payload)
                     .congestion_control(zenoh::qos::CongestionControl::Drop)
                     .await;
             }
@@ -56,11 +54,10 @@ impl ZenohTransport {
         })
     }
 
-    /// Create a SUBSCRIBING endpoint (callback → MPSC → `recv()`).
     pub fn subscriber(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel::<(Channel, Vec<u8>)>();
         let session = handle.block_on(async {
-            zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+            zenoh::open(no_batch_config()?).await.map_err(|e| anyhow::anyhow!("{e}"))
         })?;
         let key = key_expr.into();
         let sub = handle.block_on(async {
