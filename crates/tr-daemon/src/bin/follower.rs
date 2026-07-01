@@ -32,7 +32,13 @@ fn main() -> anyhow::Result<()> {
         pid: parse_hex_u16(&config.arm.so101.pid)?,
         serial: config.arm.so101.serial.clone(),
     };
-    let port = resolve_arm_port(&device)?;
+    // --port overrides USB resolver (for testing)
+    let cli_port = args.iter().position(|a| a == "--port")
+        .and_then(|i| args.get(i + 1).cloned());
+    let port = match cli_port {
+        Some(p) => p,
+        None => resolve_arm_port(&device)?,
+    };
     eprintln!("[follower] USB -> {port}");
 
     let rt_arm = tokio::runtime::Builder::new_multi_thread()

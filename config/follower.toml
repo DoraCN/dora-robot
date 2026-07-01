@@ -1,41 +1,25 @@
 # config/follower.toml — 从臂守护进程配置
 
 [arm]
-# 臂对标识 — 必须和主臂 leader.toml 中的 id 一致
 id = "arm_1"
+type = "so101"
 
-# Feetech 串口设备路径
-# macOS: /dev/cu.usbmodemXXXX
-# Linux: /dev/ttyUSB0
-port = "/dev/cu.usbmodem5A7A0555021"
-
-# 总线波特率（Feetech STS3215 标准 1 Mbps）
+[arm.so101]
 baud = 1_000_000
-
-# 舵机 ID 列表 (1..6)
 ids = [1, 2, 3, 4, 5, 6]
+vid = "0x1A86"
+pid = "0x55D3"
+serial = "5A7A055502"
 
 [zenoh]
-# 连接模式: "peer" (局域网自动发现) | "client" (连接指定路由)
 mode = "peer"
 
-# 当 mode = "client" 时，路由地址
-# connect = ["tcp/192.168.1.1:7447"]
-
 [recorder]
-# Python 虚拟环境路径
 venv = "training/.venv"
-
-# 录制器默认参数
 repo_id = "local/teleop"
 root = "datasets"
 
 [daemon]
-# 启动时自动上力? 默认 false（安全优先）
 auto_torque_on = false
-
-# 掉线后重连间隔（秒），指数退避以此为起始
 reconnect_base_sec = 1
-
-# 重连最大间隔（秒）
 reconnect_max_sec = 30
