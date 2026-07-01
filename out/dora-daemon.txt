@@ -1,0 +1,17 @@
+{"timestamp":"2026-07-01T13:16:25.196069Z","level":"INFO","fields":{"message":"Connected to dora-coordinator at ws://127.0.0.1:6013/api/daemon"},"target":"dora_daemon::coordinator"}
+{"timestamp":"2026-07-01T13:16:25.204692Z","level":"INFO","fields":{"message":"Using ZID: e72802f866d1814c8298b1bc8b4dc337"},"target":"zenoh::net::runtime"}
+{"timestamp":"2026-07-01T13:16:25.213807Z","level":"INFO","fields":{"message":"Zenoh can be reached at: tcp/127.0.0.1:49925"},"target":"zenoh::net::runtime::orchestrator"}
+{"timestamp":"2026-07-01T13:16:25.214821Z","level":"INFO","fields":{"message":"zenohd listening scout messages on 224.0.0.224:7446"},"target":"zenoh::net::runtime::orchestrator"}
+{"timestamp":"2026-07-01T13:16:48.188617Z","level":"INFO","fields":{"message":"received destroy command -> exiting"},"target":"dora_daemon","span":{"health_check_interval_duration":"None","self.daemon_id":"DaemonId { machine_id: None, uuid: 019f1dd2-d8ea-7813-839d-7247bbde0049 }","name":"run_inner"},"spans":[{"health_check_interval_duration":"None","self.daemon_id":"DaemonId { machine_id: None, uuid: 019f1dd2-d8ea-7813-839d-7247bbde0049 }","name":"run_inner"}]}
+{"timestamp":"2026-07-01T13:16:48.190480Z","level":"INFO","fields":{"message":"close session","zid":"e72802f866d1814c8298b1bc8b4dc337"},"target":"zenoh::api::session"}
+{"timestamp":"2026-07-01T13:16:48.192413Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.192749Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.192998Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.193150Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.193290Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.193412Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:16:48.193569Z","level":"ERROR","fields":{"message":"Unable to publish transport event: session closed"},"target":"zenoh::api::admin"}
+{"timestamp":"2026-07-01T13:22:14.469266Z","level":"INFO","fields":{"message":"Connected to dora-coordinator at ws://127.0.0.1:6013/api/daemon"},"target":"dora_daemon::coordinator"}
+{"timestamp":"2026-07-01T13:22:14.478279Z","level":"INFO","fields":{"message":"Using ZID: 3a47e587b9fb18176dac1257f52748e"},"target":"zenoh::net::runtime"}
+{"timestamp":"2026-07-01T13:22:14.487516Z","level":"INFO","fields":{"message":"Zenoh can be reached at: tcp/127.0.0.1:50344"},"target":"zenoh::net::runtime::orchestrator"}
+{"timestamp":"2026-07-01T13:22:14.488047Z","level":"INFO","fields":{"message":"zenohd listening scout messages on 224.0.0.224:7446"},"target":"zenoh::net::runtime::orchestrator"}

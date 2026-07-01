@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
             let cmd = match line.trim() {
                 "o" => Some(ControlCommand::TorqueOn),
                 "x" => Some(ControlCommand::TorqueOff),
-                "s" | "" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
+                "s" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
                 "f" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
                 "r" => Some(ControlCommand::ReRecord),
                 "q" => Some(ControlCommand::Stop),
