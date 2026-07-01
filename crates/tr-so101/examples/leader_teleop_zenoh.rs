@@ -50,22 +50,21 @@ fn main() -> anyhow::Result<()> {
     println!("  Ctrl‑C to stop");
     println!("────────────────────────────────────────────");
 
-    // -- Zenoh (create first — its own runtime, no conflict) -----------------
-    println!("🔗 Opening zenoh publisher on {key} ...");
-    let mut transport = ZenohTransport::publisher(&key)?;
-
-    // -- Leader arm (wrapped in its own runtime) -----------------------------
+    // Single runtime for both zenoh and the arm.
     let rt = tokio::runtime::Runtime::new()?;
 
-    // Optional CSV
-    let mut csv: Option<BufWriter<File>> = csv_path
-        .as_ref()
-        .map(|p| BufWriter::new(File::create(p).expect("create csv")));
-    if csv.is_some() {
-        writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
-    }
+    println!("🔗 Opening zenoh publisher on {key} ...");
+    let mut transport = ZenohTransport::publisher(rt.handle(), &key)?;
 
     let result: anyhow::Result<()> = rt.block_on(async {
+        // Optional CSV
+        let mut csv: Option<BufWriter<File>> = csv_path
+            .as_ref()
+            .map(|p| BufWriter::new(File::create(p).expect("create csv")));
+        if csv.is_some() {
+            writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
+        }
+
         println!("🔗 Opening leader on {port} ...");
         let mut bus = FeetechBus::new(&port, 1_000_000)?;
         bus.disable_torque(&ids).await?;

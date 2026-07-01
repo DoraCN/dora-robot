@@ -43,7 +43,8 @@ fn main() -> anyhow::Result<()> {
     if frames.is_empty() { anyhow::bail!("empty CSV"); }
 
     println!("🔗 Connecting zenoh publisher on {key} ...");
-    let mut transport = ZenohTransport::publisher(&key)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let mut transport = ZenohTransport::publisher(rt.handle(), &key)?;
     let codec = PostcardCodec;
 
     let t0 = Instant::now();

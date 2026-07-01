@@ -31,13 +31,14 @@ fn main() -> anyhow::Result<()> {
     let min_dt = Duration::from_millis(20);
 
     println!("🔗 Opening zenoh subscriber on {key} ...");
-    let mut transport = ZenohTransport::subscriber(&key)?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
         .enable_io()
         .enable_time()
         .build()?;
+
+    let mut transport = ZenohTransport::subscriber(rt.handle(), &key)?;
 
     let result = rt.block_on(async {
         println!("🔗 Opening follower on {port} ...");
