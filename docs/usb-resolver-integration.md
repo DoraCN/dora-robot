@@ -74,7 +74,7 @@ port = 30002
 pub fn resolve_arm_port(device: &UsbDeviceConfig) -> Result<String>
 ```
 
-`UsbDeviceConfig` 为 `[arm.device]` 节的 Rust 表示。
+`UsbDeviceConfig` 为 `[arm.so101]` 节中 USB 相关字段的 Rust 表示。
 
 ---
 
@@ -93,7 +93,7 @@ $ cargo run -p tr-so101 --example usb_scan
 
   ✅ 匹配 SO-101
   建议配置:
-    [arm.device]
+    [arm.so101]
     vid = "0x0483"
     pid = "0x5740"
     serial = "5A7A0555021"
