@@ -6,6 +6,10 @@ license.workspace = true
 description = "DORA node: communication middleware bridging a dataflow to a Transport."
 
 [dependencies]
-tr-transport.workspace = true
-tr-session.workspace = true
 tr-messages.workspace = true
+tr-transport.workspace = true
+tr-codec.workspace = true
+dora-node-api = "0.5.0"
+futures = "0.3"
+eyre = "0.6"
+tokio = { version = "1", features = ["rt"] }
