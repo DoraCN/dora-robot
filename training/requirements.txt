@@ -1,6 +1,6 @@
 # LeRobotDataset v3 — install lerobot from the local source the project already has.
 # (Once lerobot >= 0.4.0 is on PyPI, switch to:  lerobot>=0.4.0)
--e ../.leon/lerobot-main
+-e ../lerobot
 
 # Recorder runtime deps (no DORA needed for the standalone pipe-based recorder).
 numpy>=1.24

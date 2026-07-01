@@ -50,7 +50,7 @@ cd training
 uv python install 3.12
 uv venv --python 3.12
 source .venv/bin/activate
-uv sync                           # 从本地 .leon/lerobot-main 安装 lerobot
+uv sync                           # 从本地 lerobot/ 源码安装 lerobot
 ```
 
 ### 录制会话

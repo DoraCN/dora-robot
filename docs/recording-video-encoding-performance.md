@@ -1,6 +1,6 @@
 # Recording / Video-Encoding Performance Design
 
-> Source: `.leon/lerobot-main/docs/source/streaming_video_encoding.mdx` +
+> Source: `lerobot/docs/source/streaming_video_encoding.mdx` +
 > `LeRobotDataset.create()` params (`datasets/lerobot_dataset.py:657-678`).
 > Goal: record LeRobot **v3** episodes during SO-101 teleop **without ever
 > disturbing the realtime Rust control loop**.

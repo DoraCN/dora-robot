@@ -1,6 +1,6 @@
 # LeRobotDataset **v3.0** — Actual On-Disk Format (source-verified)
 
-> Reverse-engineered from the real source in `.leon/lerobot-main/src/lerobot/datasets/`.
+> Reverse-engineered from the real source in `lerobot/src/lerobot/datasets/`.
 > Every claim below cites `file:line` so it can be re-verified. This supersedes the
 > prose in `docs/lerobot-dataset-v3.mdx` where they differ (see §9).
 
