@@ -96,13 +96,17 @@ fn main() -> anyhow::Result<()> {
                 _ => None,
             };
 
-            if let Some(cmd) = cmd {
-                if let Ok(bytes) = codec.encode_control_command(&cmd) {
-                    let _ = t_cmd.send(tr_transport::qos::Channel::Control, &bytes);
-                    println!("  -> {:?}", cmd);
-                    let _ = io::stdout().flush();
+        if let Some(cmd) = cmd {
+            eprintln!("[leader] sending {:?}", cmd);
+            if let Ok(bytes) = codec.encode_control_command(&cmd) {
+                match t_cmd.send(tr_transport::qos::Channel::Control, &bytes) {
+                    Ok(_) => println!("  -> {:?} (ok)", cmd),
+                    Err(e) => eprintln!("  -> {:?} FAIL: {e}", cmd),
                 }
+            } else {
+                eprintln!("  -> {:?} encode FAILED", cmd);
             }
+        }
         }
 
         std::thread::sleep(Duration::from_millis(10));
