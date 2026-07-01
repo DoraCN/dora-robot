@@ -14,7 +14,7 @@
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tr_codec::PostcardCodec;
 use tr_messages::{Codec, CommandBody, TeleopCommand};
 use tr_transport::Transport;
