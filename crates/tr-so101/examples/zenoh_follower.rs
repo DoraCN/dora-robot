@@ -10,7 +10,7 @@
 //!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control]
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tr_codec::PostcardCodec;
 use tr_messages::{Codec, CommandBody, TeleopCommand};
 use tr_transport::Transport;
@@ -44,8 +44,10 @@ fn main() -> anyhow::Result<()> {
 
         let mut first = true;
         let mut count = 0u64;
-        let mut last_written = [0.0_f32; 6];
-        const DEDUP_THRESH: f32 = 0.002; // ~0.11° — skip if all joints unchanged
+        let mut last_written_pos = [0.0_f32; 6];
+        let mut last_write = Instant::now();
+        const DEDUP_THRESH: f32 = 0.002;  // ~0.11° — skip if all joints unchanged
+        const MIN_WRITE_DT: Duration = Duration::from_millis(25); // ~40Hz, matches servo PID tracking
 
         loop {
             // Tight recv loop — no rate limit, no select, no sleeps between
@@ -61,12 +63,20 @@ fn main() -> anyhow::Result<()> {
 
                 // Dedup: skip write if all joints unchanged (prevents PID restart jitter).
                 if !first {
-                    let max_d = joint_rad.iter().zip(last_written.iter())
+                    let max_d = joint_rad.iter().zip(last_written_pos.iter())
                         .map(|(a, b)| (a - b).abs())
                         .fold(0.0_f32, f32::max);
                     if max_d < DEDUP_THRESH { continue; }
                 }
-                last_written.copy_from_slice(&joint_rad);
+                // Rate limit: match servo PID tracking capability (~40Hz).
+                if !first {
+                    let elapsed = last_write.elapsed();
+                    if elapsed < MIN_WRITE_DT {
+                        tokio::time::sleep(MIN_WRITE_DT - elapsed).await;
+                    }
+                }
+                last_write = Instant::now();
+                last_written_pos.copy_from_slice(&joint_rad);
 
                 let cmds: Vec<(u8, ControlOp)> = ids.iter()
                     .zip(joint_rad.iter())

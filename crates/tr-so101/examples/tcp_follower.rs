@@ -8,7 +8,7 @@
 //!       /dev/cu.usbmodem5AB01836201 [0.0.0.0:9000]
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tr_codec::PostcardCodec;
 use tr_messages::{Codec, CommandBody, TeleopCommand};
 use tr_transport::Transport;
@@ -37,8 +37,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut first = true;
     let mut count = 0u64;
-    let mut last_written = [0.0_f32; 6];
+    let mut last_written_pos = [0.0_f32; 6];
+    let mut last_write = Instant::now();
     const DEDUP_THRESH: f32 = 0.002;
+    const MIN_WRITE_DT: Duration = Duration::from_millis(25);
     println!("▶  Receiving (Ctrl‑C to stop)\n");
 
     loop {
@@ -52,11 +54,18 @@ fn main() -> anyhow::Result<()> {
             if joint_rad.len() < 6 { continue; }
 
             if !first {
-                let max_d = joint_rad.iter().zip(last_written.iter())
+                let max_d = joint_rad.iter().zip(last_written_pos.iter())
                     .map(|(a, b)| (a - b).abs()).fold(0.0_f32, f32::max);
                 if max_d < DEDUP_THRESH { continue; }
             }
-            last_written.copy_from_slice(&joint_rad);
+            if !first {
+                let elapsed = last_write.elapsed();
+                if elapsed < MIN_WRITE_DT {
+                    std::thread::sleep(MIN_WRITE_DT - elapsed);
+                }
+            }
+            last_write = Instant::now();
+            last_written_pos.copy_from_slice(&joint_rad);
 
             let cmds: Vec<(u8, ControlOp)> = ids.iter()
                 .zip(joint_rad.iter())
