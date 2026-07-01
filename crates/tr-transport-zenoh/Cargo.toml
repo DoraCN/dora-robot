@@ -7,6 +7,6 @@ description = "Zenoh backend for the tr-transport Transport trait."
 
 [dependencies]
 tr-transport = { workspace = true }
-zenoh = "1.9.0"
+zenoh = { workspace = true }
 tokio = { version = "1", features = ["rt"] }
 anyhow = "1"

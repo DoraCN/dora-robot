@@ -10,9 +10,11 @@ tr-messages = { workspace = true, features = ["serde"] }
 tr-codec.workspace = true
 tr-transport.workspace = true
 tr-transport-zenoh = { path = "../tr-transport-zenoh" }
-dora-node-api = "0.5.0"
-arrow = "54"
-futures = "0.3"
-eyre = "0.6"
+dora-node-api = { path = "../../dora/apis/rust/node", default-features = false }
+dora-arrow-convert = { path = "../../dora/libraries/arrow-convert" }
+dora-message = { path = "../../dora/libraries/message" }
+dora-core = { path = "../../dora/libraries/core", features = ["zenoh"] }
+arrow = { workspace = true }
+eyre = { workspace = true }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 serde_json = "1"

@@ -19,16 +19,15 @@ members = [
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 authors = ["dora-robot contributors"]
-repository = ""
-rust-version = "1.75"
+description = "dora-robot teleoperation platform"
+documentation = "https://github.com/DoraCN/dora-robot"
+repository = "https://github.com/DoraCN/dora-robot"
+readme = "README.md"
+rust-version = "1.88"
 
-# NOTE (skeleton): the core crates are intentionally `std`-only so the whole
-# workspace compiles offline without fetching any registry dependency.
-# Production dependencies (serde, postcard/prost, nalgebra, dora-node-api,
-# tokio, zenoh, mcap, ...) are documented per-crate as `[TODO: add dep]`.
 [workspace.dependencies]
 tr-messages = { path = "crates/tr-messages" }
 tr-transport = { path = "crates/tr-transport" }
@@ -39,4 +38,63 @@ tr-codec = { path = "crates/tr-codec" }
 tr-so101 = { path = "crates/tr-so101" }
 tr-daemon = { path = "crates/tr-daemon" }
 usb-resolver = "0.1.1"
-log = "0.4"
+log = { version = "0.4.21", features = ["serde"] }
+
+# ── DORA 1.0 crates (local path) ──────────────────────────
+dora-node-api = { path = "dora/apis/rust/node", default-features = false }
+dora-core = { path = "dora/libraries/core" }
+dora-message = { path = "dora/libraries/message" }
+dora-arrow-convert = { path = "dora/libraries/arrow-convert" }
+dora-tracing = { path = "dora/libraries/extensions/telemetry/tracing" }
+dora-metrics = { path = "dora/libraries/extensions/telemetry/metrics" }
+
+# ── DORA workspace deps (inherited by dora crates) ────────
+arrow = "58"
+arrow-data = "58"
+arrow-schema = "58"
+arrow-array = "58"
+arrow-json = "58"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9.33"
+serde_json = "1.0.145"
+eyre = "0.6.8"
+tracing = "0.1.36"
+tokio = { version = "1.28", default-features = false }
+tokio-stream = "0.1.11"
+uuid = { version = "1.7", features = ["serde", "v7"] }
+futures = { version = "0.3.28", default-features = false, features = ["std", "async-await"] }
+bincode = "1.3.3"
+flume = "0.10.14"
+semver = { version = "1.0.23", features = ["serde"] }
+colored = "3.0.0"
+inquire = { version = "0.7.5", default-features = false }
+thiserror = "2.0"
+tempfile = "3.23.0"
+proptest = "1.5"
+mavlink = { version = "0.13", default-features = false, features = ["std", "serde", "common", "tcp", "udp", "direct-serial"] }
+serialport = "4.6"
+url = "2.5"
+zenoh = { version = "~1.8", default-features = false, features = ["shared-memory", "unstable", "transport_tcp", "transport_udp", "transport_unixsock-stream"] }
+git2 = { version = "0.21", features = ["vendored-openssl", "https", "ssh"] }
+dunce = "1.0.5"
+itertools = "0.14"
+which = "7"
+schemars = "1.0.4"
+serde-with-expand-env = "1.1.0"
+aligned-vec = { version = "0.5.0", features = ["serde"] }
+uhlc = "0.5.1"
+getrandom = "0.2"
+dirs = "6"
+libc = "0.2"
+chrono = { version = "0.4", features = ["serde"] }
+opentelemetry = "0.31.0"
+futures-concurrency = "7.3.0"
+futures-timer = "3.0.2"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+
+# NOTE (skeleton): the core crates are intentionally `std`-only so the whole
+# workspace compiles offline without fetching any registry dependency.
+# Production dependencies (serde, postcard/prost, nalgebra, dora-node-api,
+# tokio, zenoh, mcap, ...) are documented per-crate as `[TODO: add dep]`.

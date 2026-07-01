@@ -21,5 +21,6 @@ __pycache__/
 
 /logs
 /lerobot
+/dora
 crates/tr-daemon/out/
 out/
