@@ -37,8 +37,8 @@ fn main() -> eyre::Result<()> {
     let k_cmd = format!("tr/{arm_id}/command");
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io().enable_time().build().unwrap();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1).enable_io().enable_time().build().unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_ctrl) {
             Ok(s) => s, Err(e) => { eprintln!("capture ctrl: {e}"); return; }
         };
@@ -55,8 +55,8 @@ fn main() -> eyre::Result<()> {
     });
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io().enable_time().build().unwrap();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1).enable_io().enable_time().build().unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_obs) {
             Ok(s) => s, Err(e) => { eprintln!("capture obs: {e}"); return; }
         };
@@ -70,8 +70,8 @@ fn main() -> eyre::Result<()> {
     });
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io().enable_time().build().unwrap();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1).enable_io().enable_time().build().unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_cmd) {
             Ok(s) => s, Err(e) => { eprintln!("capture cmd: {e}"); return; }
         };

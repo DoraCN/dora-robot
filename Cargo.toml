@@ -18,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0-rc1"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["dora-robot contributors"]
@@ -41,12 +41,12 @@ usb-resolver = "0.1.1"
 log = { version = "0.4.21", features = ["serde"] }
 
 # ── DORA 1.0 crates (local path) ──────────────────────────
-dora-node-api = { path = "dora/apis/rust/node", default-features = false }
-dora-core = { path = "dora/libraries/core" }
-dora-message = { path = "dora/libraries/message" }
-dora-arrow-convert = { path = "dora/libraries/arrow-convert" }
-dora-tracing = { path = "dora/libraries/extensions/telemetry/tracing" }
-dora-metrics = { path = "dora/libraries/extensions/telemetry/metrics" }
+dora-node-api = { path = "dora/apis/rust/node", default-features = false, package = "dora-node-api" }
+dora-core = { path = "dora/libraries/core", package = "dora-core" }
+dora-message = { path = "dora/libraries/message", package = "dora-message" }
+dora-arrow-convert = { path = "dora/libraries/arrow-convert", package = "dora-arrow-convert" }
+dora-tracing = { path = "dora/libraries/extensions/telemetry/tracing", package = "dora-tracing" }
+dora-metrics = { path = "dora/libraries/extensions/telemetry/metrics", package = "dora-metrics" }
 
 # ── DORA workspace deps (inherited by dora crates) ────────
 arrow = "58"

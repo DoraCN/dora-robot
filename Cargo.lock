@@ -1598,18 +1598,6 @@ dependencies = [
 
 [[package]]
 name = "dora-arrow-convert"
-version = "0.1.0"
-dependencies = [
- "arrow 58.3.0",
- "chrono",
- "eyre",
- "half",
- "num",
- "tracing",
-]
-
-[[package]]
-name = "dora-arrow-convert"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25e2eba9eeba45431b8ef2e099688dce22592700bcafacd8c04d0fda3c10d79b"
@@ -1622,35 +1610,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "dora-core"
-version = "0.1.0"
+name = "dora-arrow-convert"
+version = "1.0.0-rc1"
 dependencies = [
- "arrow-buffer 58.3.0",
- "arrow-schema 58.3.0",
- "dora-message 0.1.0",
- "dunce",
+ "arrow 58.3.0",
+ "chrono",
  "eyre",
- "fs_extra",
- "git2",
- "itertools 0.14.0",
- "log",
- "proptest",
- "schemars 1.2.1",
- "semver",
- "serde",
- "serde-with-expand-env",
- "serde_json",
- "serde_yaml",
- "splitty",
- "syn 2.0.118",
- "tempfile",
- "tokio",
- "tokio-stream",
+ "half",
+ "num",
  "tracing",
- "url",
- "uuid",
- "which 7.0.3",
- "zenoh",
 ]
 
 [[package]]
@@ -1681,19 +1649,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "dora-message"
-version = "0.1.0"
+name = "dora-core"
+version = "1.0.0-rc1"
 dependencies = [
- "aligned-vec",
- "arrow-data 58.3.0",
+ "arrow-buffer 58.3.0",
  "arrow-schema 58.3.0",
- "bincode",
- "chrono",
- "criterion",
- "dirs 6.0.0",
+ "dora-message 1.0.0-rc1",
+ "dunce",
  "eyre",
- "getrandom 0.2.17",
- "libc",
+ "fs_extra",
+ "git2",
+ "itertools 0.14.0",
  "log",
  "proptest",
  "schemars 1.2.1",
@@ -1702,10 +1668,16 @@ dependencies = [
  "serde-with-expand-env",
  "serde_json",
  "serde_yaml",
+ "splitty",
+ "syn 2.0.118",
  "tempfile",
  "tokio",
- "uhlc 0.5.2",
+ "tokio-stream",
+ "tracing",
+ "url",
  "uuid",
+ "which 7.0.3",
+ "zenoh",
 ]
 
 [[package]]
@@ -1736,14 +1708,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "dora-metrics"
-version = "0.1.0"
+name = "dora-message"
+version = "1.0.0-rc1"
 dependencies = [
+ "aligned-vec",
+ "arrow-data 58.3.0",
+ "arrow-schema 58.3.0",
+ "bincode",
+ "chrono",
+ "criterion",
+ "dirs 6.0.0",
  "eyre",
- "opentelemetry 0.31.0",
- "opentelemetry-otlp",
- "opentelemetry-system-metrics",
- "opentelemetry_sdk 0.31.0",
+ "getrandom 0.2.17",
+ "libc",
+ "log",
+ "proptest",
+ "schemars 1.2.1",
+ "semver",
+ "serde",
+ "serde-with-expand-env",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "uhlc 0.5.2",
+ "uuid",
 ]
 
 [[package]]
@@ -1760,36 +1749,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "dora-node-api"
-version = "0.1.0"
+name = "dora-metrics"
+version = "1.0.0-rc1"
 dependencies = [
- "aligned-vec",
- "arrow 58.3.0",
- "arrow-json 58.3.0",
- "arrow-schema 58.3.0",
- "bincode",
- "chrono",
- "colored",
- "dora-arrow-convert 0.1.0",
- "dora-core 0.1.0",
- "dora-message 0.1.0",
- "dora-metrics 0.1.0",
- "dora-tracing 0.1.0",
  "eyre",
- "flume 0.10.14",
- "futures",
- "futures-concurrency",
- "futures-timer",
- "inquire",
- "is-terminal",
  "opentelemetry 0.31.0",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
- "zenoh",
+ "opentelemetry-otlp",
+ "opentelemetry-system-metrics",
+ "opentelemetry_sdk 0.31.0",
 ]
 
 [[package]]
@@ -1824,17 +1791,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "dora-tracing"
-version = "0.1.0"
+name = "dora-node-api"
+version = "1.0.0-rc1"
 dependencies = [
+ "aligned-vec",
+ "arrow 58.3.0",
+ "arrow-json 58.3.0",
+ "arrow-schema 58.3.0",
+ "bincode",
+ "chrono",
+ "colored",
+ "dora-arrow-convert 1.0.0-rc1",
+ "dora-core 1.0.0-rc1",
+ "dora-message 1.0.0-rc1",
+ "dora-metrics 1.0.0-rc1",
+ "dora-tracing 1.0.0-rc1",
  "eyre",
+ "flume 0.10.14",
+ "futures",
+ "futures-concurrency",
+ "futures-timer",
+ "inquire",
+ "is-terminal",
  "opentelemetry 0.31.0",
- "opentelemetry-otlp",
- "opentelemetry_sdk 0.31.0",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
- "tracing-opentelemetry 0.32.1",
- "tracing-subscriber",
  "uuid",
+ "zenoh",
 ]
 
 [[package]]
@@ -1850,6 +1836,20 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry 0.32.1",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "dora-tracing"
+version = "1.0.0-rc1"
+dependencies = [
+ "eyre",
+ "opentelemetry 0.31.0",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk 0.31.0",
+ "tracing",
+ "tracing-opentelemetry 0.32.1",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -5823,7 +5823,7 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
 name = "tr-bridge"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "dora-node-api 0.5.0",
  "eyre",
@@ -5836,13 +5836,13 @@ dependencies = [
 
 [[package]]
 name = "tr-capture"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "arrow 58.3.0",
- "dora-arrow-convert 0.1.0",
- "dora-core 0.1.0",
- "dora-message 0.1.0",
- "dora-node-api 0.1.0",
+ "dora-arrow-convert 1.0.0-rc1",
+ "dora-core 1.0.0-rc1",
+ "dora-message 1.0.0-rc1",
+ "dora-node-api 1.0.0-rc1",
  "eyre",
  "serde_json",
  "tokio",
@@ -5854,7 +5854,7 @@ dependencies = [
 
 [[package]]
 name = "tr-codec"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "postcard",
  "serde",
@@ -5863,7 +5863,7 @@ dependencies = [
 
 [[package]]
 name = "tr-daemon"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "log",
@@ -5883,7 +5883,7 @@ dependencies = [
 
 [[package]]
 name = "tr-messages"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5891,21 +5891,21 @@ dependencies = [
 
 [[package]]
 name = "tr-policy"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "tr-messages",
 ]
 
 [[package]]
 name = "tr-robot"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "tr-messages",
 ]
 
 [[package]]
 name = "tr-robot-node"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "arrow 59.0.0",
  "dora-node-api 0.5.0",
@@ -5920,14 +5920,14 @@ dependencies = [
 
 [[package]]
 name = "tr-session"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "tr-messages",
 ]
 
 [[package]]
 name = "tr-so101"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "feetech-servo-sdk",
@@ -5945,14 +5945,14 @@ dependencies = [
 
 [[package]]
 name = "tr-teleop"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "tr-messages",
 ]
 
 [[package]]
 name = "tr-teleop-node"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "dora-node-api 0.5.0",
  "eyre",
@@ -5966,11 +5966,11 @@ dependencies = [
 
 [[package]]
 name = "tr-transport"
-version = "0.1.0"
+version = "1.0.0-rc1"
 
 [[package]]
 name = "tr-transport-zenoh"
-version = "0.1.0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "tokio",
