@@ -18,7 +18,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-/// Safe park pose (degrees) — roughly the SO-101's relaxed home position.
+/// Safe park pose (degrees) — kept for reference.
+#[allow(dead_code)]
 const SAFE_PARK: [f32; 6] = [0.0, -105.0, 90.0, 74.0, 0.0, 0.0];
 
 /// One frame of a recorded leader trajectory (joints in radians).
@@ -58,6 +59,7 @@ fn parse_csv(path: &PathBuf) -> io::Result<Vec<Frame>> {
 }
 
 /// Smooth linear interpolation from current to target over `duration` seconds at 50 Hz.
+#[allow(dead_code)]
 async fn move_smoothly(
     bus: &mut FeetechBus,
     ids: &[u8],
@@ -167,12 +169,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
 
-    // -- Safe parking (always run after the replay loop exits) --------------
-    println!("\n🛑 Parking safely ...");
-    move_smoothly(&mut bus, &ids, &SAFE_PARK, 3.0).await?;
-    println!("🏠 Parked at safe pose.");
-
+    // -- Done / Ctrl‑C → disable torque and exit ---------------------------
+    println!("\n💤 Disabling torque ...");
     bus.disable_torque(&ids).await?;
-    println!("💤 Torque OFF. Exiting.");
+    println!("👋 Exiting.");
     Ok(())
 }
