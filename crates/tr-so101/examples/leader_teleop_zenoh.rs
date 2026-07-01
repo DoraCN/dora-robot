@@ -57,6 +57,7 @@ fn main() -> anyhow::Result<()> {
     // -- Leader arm ----------------------------------------------------------
     println!("🔗 Opening leader on {port} ...");
     let rt = tokio::runtime::Runtime::new()?;
+    let _guard = rt.enter(); // FeetechBus needs a reactor context
     let mut bus = FeetechBus::new(&port, 1_000_000)?;
     rt.block_on(async { bus.disable_torque(&ids).await })?;
     println!("   torque: OFF (backdrivable)");
