@@ -72,14 +72,21 @@ fn main() -> anyhow::Result<()> {
     let mut frames: u64 = 0;
     let codec = PostcardCodec;
 
-    eprintln!("[follower] state=IDLE");
+    eprintln!("[follower] state=IDLE (keys: {k_ctrl}, {k_cmd}, {k_obs}, {k_status})");
 
+    let mut loop_count: u64 = 0;
     loop {
+        loop_count += 1;
+        if loop_count % 200 == 1 {
+            eprintln!("[follower] tick #{loop_count}");
+        }
+
         match t_cmd.recv(Duration::from_millis(5)) {
             Ok(Some(inbound)) => {
                 if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                     eprintln!("[follower] cmd={:?}", cmd);
                     let (_, action) = fsm.apply(&cmd);
+                    eprintln!("[follower] fsm state={:?} action={:?}", fsm.current(), action);
                     match action {
                         DataflowAction::Launch => {
                             if dora.is_none() {
@@ -106,6 +113,9 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(None) => {}
             Err(e) => {
+                if loop_count % 200 == 1 {
+                    eprintln!("[follower] cmd err: {e}");
+                }
                 eprintln!("[follower] cmd err: {e}");
                 fsm.apply(&ControlCommand::TorqueOff);
                 if let Some(df) = dora.take() { let _ = df.stop(); }
