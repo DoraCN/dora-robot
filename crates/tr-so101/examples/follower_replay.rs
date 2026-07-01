@@ -157,6 +157,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         eprintln!("[warn] write error @ frame {idx}: {e}");
                     }
                     idx += 1;
+                    if idx >= frames.len() {
+                        break;  // all frames played → exit the select loop
+                    }
                     if idx % 100 == 0 {
                         print!("\r   frame {idx}/{}", frames.len());
                         let _ = io::stdout().flush();
