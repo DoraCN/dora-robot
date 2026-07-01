@@ -34,6 +34,7 @@ pub struct So101Follower<B: MotorBus> {
     source_id: String,
     seq: u64,
     e_stopped: bool,
+    holding: bool,  // hold-current state (safe-state phase 1, torque still on)
     prev_target: Option<[f32; DOF]>,
     slew_rad: f32,
 }
@@ -55,6 +56,7 @@ impl<B: MotorBus> So101Follower<B> {
             source_id: source_id.into(),
             seq: 0,
             e_stopped: false,
+            holding: false,
             prev_target: None,
             slew_rad,
         }
@@ -130,6 +132,7 @@ impl<B: MotorBus> RobotDriver for So101Follower<B> {
 
     fn command(&mut self, cmd: &TeleopCommand) -> Result<(), RobotError> {
         if self.e_stopped { return Err(RobotError::Hardware("e-stopped".into())); }
+        if self.holding { return Err(RobotError::Hardware("in safe-hold".into())); }
         let positions: &[f64] = match &cmd.body {
             CommandBody::Joint(jt) => &jt.positions,
             _ => return Err(RobotError::Unsupported("only JointTargets (this iteration)")),
@@ -173,10 +176,29 @@ impl<B: MotorBus> RobotDriver for So101Follower<B> {
 
     fn e_stop(&mut self) -> Result<(), RobotError> {
         self.e_stopped = true;
+        self.holding = false;
         let _ = self
             .rt
             .block_on(async { self.arm.set_torque(false).await });
         Ok(())
+    }
+}
+
+impl<B: MotorBus> So101Follower<B> {
+    /// Enter safe-hold (phase 1 of M5): stop following new commands, but
+    /// **keep torque on** to hold the current position passively.
+    pub fn hold(&mut self) {
+        self.holding = true;
+    }
+
+    /// Resume from safe-hold.
+    pub fn resume(&mut self) {
+        self.holding = false;
+    }
+
+    /// Whether the follower is currently in safe-hold or e-stopped.
+    pub fn is_safe(&self) -> bool {
+        self.holding || self.e_stopped
     }
 }
 
@@ -252,12 +274,34 @@ mod mock_tests {
     }
 
     #[test]
+    fn hold_blocks_commands_but_not_e_stop() {
+        let arm = So101Arm::new(MockBus::new(&IDS), So101Config::default());
+        let mut f = So101Follower::new(arm, 1, "f");
+        f.hold();
+        assert!(f.is_safe());
+        assert!(f.command(&cmd([0.0; DOF])).is_err());
+        // e_stop still works and leaves torque off + safe state true
+        f.e_stop().unwrap();
+        assert!(f.is_safe());
+        assert!(!f.holding); // e_stop clears hold
+    }
+
+    #[test]
+    fn resume_allows_commands_again() {
+        let arm = So101Arm::new(MockBus::new(&IDS), So101Config::default());
+        let mut f = So101Follower::new(arm, 1, "f");
+        f.hold();
+        f.resume();
+        assert!(!f.is_safe());
+        f.command(&cmd([0.0; DOF])).unwrap();
+    }
+
+    #[test]
     fn align_to_runs_and_sets_baseline() {
         let arm = So101Arm::new(MockBus::new(&IDS), So101Config::default());
         let mut f = So101Follower::new(arm, 1, "f");
         let target: [f32; DOF] = [0.05, 0.0, 0.0, 0.0, 0.0, 0.0];
         f.align_to(&target).unwrap();
-        // After align, sending the same command should succeed (no slew violation).
         f.command(&cmd(target)).unwrap();
     }
 }
