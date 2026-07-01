@@ -65,10 +65,8 @@ fn main() -> anyhow::Result<()> {
         writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
     }
 
-    let result: anyhow::Result<()> = rt.block_on(async move {
+    let result: anyhow::Result<()> = rt.block_on(async {
         println!("🔗 Opening leader on {port} ...");
-        // FeetechBus::new() is sync, but tokio-serial needs an active reactor.
-        // Inside block_on the runtime is active, so it works.
         let mut bus = FeetechBus::new(&port, 1_000_000)?;
         bus.disable_torque(&ids).await?;
         println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
@@ -105,7 +103,7 @@ fn main() -> anyhow::Result<()> {
         Ok(())
     });
 
-    drop(transport);
     result?;
+    drop(transport);
     Ok(())
 }
