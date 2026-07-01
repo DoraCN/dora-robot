@@ -21,19 +21,16 @@ struct KeepAlive {
     sub: Option<Box<dyn std::any::Any + Send>>,
 }
 
-fn no_batch_config() -> anyhow::Result<zenoh::Config> {
-    let mut c = zenoh::Config::default();
-    c.insert_json5("transport/link/tx/batch_size", "1")
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(c)
+fn zenoh_session(handle: &tokio::runtime::Handle) -> anyhow::Result<zenoh::Session> {
+    handle.block_on(async {
+        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+    })
 }
 
 impl ZenohTransport {
     pub fn publisher(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
         let key = key_expr.into();
-        let session = handle.block_on(async {
-            zenoh::open(no_batch_config()?).await.map_err(|e| anyhow::anyhow!("{e}"))
-        })?;
+        let session = zenoh_session(handle)?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
         let session2 = session.clone();
@@ -56,9 +53,7 @@ impl ZenohTransport {
 
     pub fn subscriber(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel::<(Channel, Vec<u8>)>();
-        let session = handle.block_on(async {
-            zenoh::open(no_batch_config()?).await.map_err(|e| anyhow::anyhow!("{e}"))
-        })?;
+        let session = zenoh_session(handle)?;
         let key = key_expr.into();
         let sub = handle.block_on(async {
             session
