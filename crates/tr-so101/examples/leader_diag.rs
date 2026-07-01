@@ -9,7 +9,6 @@
 use feetech_servo_sdk::{FeetechBus, MotorBus};
 use std::f32::consts::PI;
 use std::io::{self, Write};
-use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let port = std::env::args().nth(1).unwrap_or_else(|| "/dev/cu.usbmodem5AB01836201".into());
@@ -31,7 +30,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "seq", "j1°", "j2°", "j3°", "j4°", "j5°", "j6°");
 
     let mut seq: u64 = 0;
-    let t0 = Instant::now();
     loop {
         // Tiny sleep to avoid hot-looping the CPU
         std::thread::sleep(std::time::Duration::from_millis(1));
