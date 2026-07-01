@@ -1,9 +1,9 @@
 //! Zenoh → follower arm.
 //!
 //! Subscribes to `tr/csv/control`, decodes incoming postcard-encoded
-//! `JointTargets`, and drives the follower SO-101 in real time.
-//! Frames are consumed in a tight draining loop (no artificial delay between
-//! frames); per-frame timing is logged for debugging.
+//! `JointTargets`, and drives the follower SO-101.  Frames are consumed one
+//! at a time with a **minimum inter-frame interval** (20 ms) to smooth out
+//! zenoh delivery bursts.  Per-frame timing is logged for debugging.
 //!
 //! Usage:
 //!   cargo run -p tr-so101 --example zenoh_follower -- /dev/cu.usbmodem5AB01836201
@@ -22,6 +22,9 @@ fn main() -> anyhow::Result<()> {
     let ids: [u8; 6] = [1, 2, 3, 4, 5, 6];
     let codec = PostcardCodec;
 
+    // Min interval between consecutive frame writes — smooths zenoh batching.
+    let min_dt = Duration::from_millis(20);
+
     println!("🔗 Opening zenoh subscriber ...");
     let mut transport = ZenohTransport::subscriber("tr/csv/control")?;
 
@@ -31,7 +34,13 @@ fn main() -> anyhow::Result<()> {
         .enable_time()
         .build()?;
 
-    rt.block_on(async move {
+    // Keep transport alive across the block_on boundary and drop it after the
+    // runtime is shut down (avoids "Cannot drop a runtime …" panic from Session::drop).
+    let mut transport_opt = Some(transport);
+
+    let result = rt.block_on(async move {
+        let transport = transport_opt.as_mut().unwrap();
+
         println!("🔗 Opening follower on {port} ...");
         let mut bus = FeetechBus::new(&port, 1_000_000)?;
         bus.enable_torque(&ids).await?;
@@ -40,17 +49,16 @@ fn main() -> anyhow::Result<()> {
         let mut first = true;
         let mut ctrl_c = std::pin::pin!(tokio::signal::ctrl_c());
         let mut count = 0u64;
+        let mut last_write = Instant::now();
         let mut last_recv = Instant::now();
 
         loop {
-            // Yield briefly so ctrl_c can be checked; drain pending frames in a
-            // tight loop afterwards (no artificial delay between frames).
             tokio::select! {
                 _ = &mut ctrl_c => { println!(); break; }
                 _ = tokio::time::sleep(Duration::from_millis(1)) => {}
             }
 
-            while let Ok(Some(inbound)) = transport.recv(Duration::from_millis(0)) {
+            if let Ok(Some(inbound)) = transport.recv(Duration::from_millis(0)) {
                 let now = Instant::now();
                 let dt_ms = now.duration_since(last_recv).as_millis();
                 last_recv = now;
@@ -65,6 +73,14 @@ fn main() -> anyhow::Result<()> {
                 if joint_rad.len() < 6 {
                     continue;
                 }
+
+                // Rate limit — if we just wrote a frame, wait until min_dt has
+                // passed before writing the next one. This spreads out bursts.
+                let elapsed = last_write.elapsed();
+                if elapsed < min_dt {
+                    tokio::time::sleep(min_dt - elapsed).await;
+                }
+                last_write = Instant::now();
 
                 if first {
                     let cmds: Vec<(u8, ControlOp)> = ids
@@ -86,12 +102,12 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                // Log timing for the first 20 frames and every 50th thereafter.
                 if count < 20 || count % 50 == 0 {
-                    println!("[recv] frame={:>4}  dt={:>4}ms  j1={:>7.1}°",
-                        count, dt_ms, joint_rad[0] * 57.2958);
+                    println!(
+                        "[recv] frame={:>4} dt={:>4}ms  j1={:>7.1}°",
+                        count, dt_ms, joint_rad[0] * 57.2958,
+                    );
                 }
-
                 count += 1;
             }
         }
@@ -100,7 +116,11 @@ fn main() -> anyhow::Result<()> {
         bus.disable_torque(&ids).await?;
         println!("👋 Exiting.");
         Ok::<_, anyhow::Error>(())
-    })?;
+    });
 
+    // Drop the transport AFTER the runtime — avoids Session::drop panic.
+    drop(transport_opt);
+
+    result?;
     Ok(())
 }
