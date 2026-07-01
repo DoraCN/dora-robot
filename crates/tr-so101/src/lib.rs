@@ -13,6 +13,7 @@ pub mod arm;
 pub mod config;
 pub mod follower;
 pub mod leader;
+pub mod servo_loop;
 
 /// Degrees of freedom of an SO-101 (5 arm joints + gripper).
 pub const DOF: usize = 6;
@@ -21,6 +22,7 @@ pub use arm::So101Arm;
 pub use config::{JointCalib, So101Config};
 pub use follower::So101Follower;
 pub use leader::So101Leader;
+pub use servo_loop::ServoLoop;
 
 // Re-export the SDK pieces callers need.
 pub use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus, ServoError};
