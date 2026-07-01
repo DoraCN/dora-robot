@@ -13,7 +13,7 @@ use feetech_servo_sdk::{FeetechBus, MotorBus};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tr_codec::PostcardCodec;
 use tr_messages::{
     Codec, CommandBody, ControlMode, JointTargets, MessageHeader, TeleopCommand,
@@ -50,59 +50,59 @@ fn main() -> anyhow::Result<()> {
     println!("  Ctrl‑C to stop");
     println!("────────────────────────────────────────────");
 
-    // Single runtime for both zenoh and the arm.
+    // -- Single runtime shared by zenoh and the serial bus --------------------
     let rt = tokio::runtime::Runtime::new()?;
 
+    // Zenoh transport (created before rt.enter(), same as diag pattern).
     println!("🔗 Opening zenoh publisher on {key} ...");
     let mut transport = ZenohTransport::publisher(rt.handle(), &key)?;
 
-    let result: anyhow::Result<()> = rt.block_on(async {
-        // Optional CSV
-        let mut csv: Option<BufWriter<File>> = csv_path
-            .as_ref()
-            .map(|p| BufWriter::new(File::create(p).expect("create csv")));
-        if csv.is_some() {
-            writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
+    // Enter the runtime permanently so FeetechBus::new() + per-read block_on
+    // work exactly like the proven leader_diag example.
+    let _guard = rt.enter();
+
+    println!("🔗 Opening leader on {port} ...");
+    let mut bus = FeetechBus::new(&port, 1_000_000)?;
+    rt.block_on(async { bus.disable_torque(&ids).await })?;
+    println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
+
+    // Optional CSV
+    let mut csv: Option<BufWriter<File>> = csv_path
+        .as_ref()
+        .map(|p| BufWriter::new(File::create(p).expect("create csv")));
+    if csv.is_some() {
+        writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
+    }
+
+    let mut seq: u64 = 0;
+    loop {
+        // Yield briefly so Ctrl‑C can be detected.
+        std::thread::sleep(Duration::from_millis(1));
+
+        let positions = rt.block_on(async { bus.sync_read_positions(&ids).await })?;
+        let stamp = now_nanos();
+
+        let cmd = TeleopCommand {
+            header: MessageHeader::new(0, "leader", ControlMode::JointTargets),
+            body: CommandBody::Joint(JointTargets {
+                positions: positions.iter().map(|&p| p as f64).collect(),
+                velocities: None,
+                efforts: None,
+            }),
+        };
+        let encoded = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
+        transport.send(Channel::Control, &encoded)?;
+
+        if let Some(ref mut w) = csv {
+            write!(w, "{seq} {stamp}")?;
+            for &p in &positions { write!(w, " {:.6}", p)?; }
+            writeln!(w)?;
         }
 
-        println!("🔗 Opening leader on {port} ...");
-        let mut bus = FeetechBus::new(&port, 1_000_000)?;
-        bus.disable_torque(&ids).await?;
-        println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
-
-        let mut seq: u64 = 0;
-        loop {
-            let positions = bus.sync_read_positions(&ids).await?;
-            let stamp = now_nanos();
-
-            let cmd = TeleopCommand {
-                header: MessageHeader::new(0, "leader", ControlMode::JointTargets),
-                body: CommandBody::Joint(JointTargets {
-                    positions: positions.iter().map(|&p| p as f64).collect(),
-                    velocities: None,
-                    efforts: None,
-                }),
-            };
-            let encoded = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
-            transport.send(Channel::Control, &encoded)?;
-
-            if let Some(ref mut w) = csv {
-                write!(w, "{seq} {stamp}")?;
-                for &p in &positions { write!(w, " {:.6}", p)?; }
-                writeln!(w)?;
-            }
-
-            seq += 1;
-            if seq % 100 == 0 {
-                print!("\r   frames: {seq}");
-                let _ = std::io::stdout().flush();
-            }
+        seq += 1;
+        if seq % 100 == 0 {
+            print!("\r   frames: {seq}");
+            let _ = std::io::stdout().flush();
         }
-        #[allow(unreachable_code)]
-        Ok(())
-    });
-
-    result?;
-    drop(transport);
-    Ok(())
+    }
 }
