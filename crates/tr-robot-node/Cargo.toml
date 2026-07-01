@@ -3,8 +3,15 @@ name = "tr-robot-node"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "DORA node: bridge -> retarget/IK -> robot; feedback back."
+description = "DORA node: bridge -> robot; feedback + recording Arrow back."
 
 [dependencies]
-tr-robot.workspace = true
 tr-messages.workspace = true
+tr-robot.workspace = true
+tr-codec.workspace = true
+tr-so101.workspace = true
+dora-node-api = "0.5.0"
+arrow = "59"
+futures = "0.3"
+eyre = "0.6"
+tokio = { version = "1", features = ["rt"] }
