@@ -34,13 +34,7 @@ fn main() -> anyhow::Result<()> {
         .enable_time()
         .build()?;
 
-    // Keep transport alive across the block_on boundary and drop it after the
-    // runtime is shut down (avoids "Cannot drop a runtime …" panic from Session::drop).
-    let mut transport_opt = Some(transport);
-
-    let result = rt.block_on(async move {
-        let transport = transport_opt.as_mut().unwrap();
-
+    let result = rt.block_on(async {
         println!("🔗 Opening follower on {port} ...");
         let mut bus = FeetechBus::new(&port, 1_000_000)?;
         bus.enable_torque(&ids).await?;
@@ -119,8 +113,7 @@ fn main() -> anyhow::Result<()> {
     });
 
     // Drop the transport AFTER the runtime — avoids Session::drop panic.
-    drop(transport_opt);
-
+    drop(transport);
     result?;
     Ok(())
 }
