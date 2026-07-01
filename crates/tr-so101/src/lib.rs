@@ -13,6 +13,7 @@ pub mod arm;
 pub mod config;
 pub mod follower;
 pub mod leader;
+pub mod resolver;
 pub mod servo_loop;
 
 /// Degrees of freedom of an SO-101 (5 arm joints + gripper).

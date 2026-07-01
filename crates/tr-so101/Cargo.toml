@@ -19,6 +19,8 @@ tr-transport-zenoh = { path = "../tr-transport-zenoh" }
 zenoh = "1.9.0"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 anyhow = "1"
+usb-resolver.workspace = true
+log.workspace = true
 
 [features]
 mock = ["feetech-servo-sdk/mock"]

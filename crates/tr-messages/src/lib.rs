@@ -8,6 +8,7 @@
 pub mod capability;
 pub mod codec;
 pub mod command;
+pub mod control;
 pub mod episode;
 pub mod error;
 pub mod feedback;
