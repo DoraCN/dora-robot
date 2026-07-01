@@ -1,3 +1,0 @@
-{"timestamp":"2026-07-01T12:05:05.320295Z","level":"INFO","fields":{"message":"","name":"MeterProvider.GlobalSet","message":"Global meter provider is set. Meters can now be created using global::meter() or global::meter_with_scope()."},"target":"opentelemetry"}
-{"timestamp":"2026-07-01T12:05:05.323790Z","level":"INFO","fields":{"message":"WS server listening on port 6013"},"target":"dora_coordinator"}
-{"timestamp":"2026-07-01T12:05:05.878965Z","level":"INFO","fields":{"message":"daemon 019f1d91-8aca-74a1-8ff0-04efa3d28ff9 reports 0 running dataflow(s)"},"target":"dora_coordinator"}
