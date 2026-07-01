@@ -16,7 +16,7 @@
 //!   cargo run ... --record | python -m tr_lerobot.pipe_recorder
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tr_codec::PostcardCodec;
@@ -70,12 +70,8 @@ fn main() -> anyhow::Result<()> {
         })?;
     }
 
-    // Output pipe.
-    let mut stdout: Option<BufWriter<io::Stdout>> = if do_record {
-        Some(BufWriter::new(io::stdout()))
-    } else {
-        None
-    };
+    // Output pipe — line-buffered directly (no BufWriter, lost on Ctrl‑C).
+    let mut stdout = io::stdout();
 
     let result = rt.block_on(async {
         eprintln!("🔗 follower on {port} ...");
@@ -93,14 +89,15 @@ fn main() -> anyhow::Result<()> {
         loop {
             // Drain episode events.
             while let Ok(ev) = ep_rx.try_recv() {
-                if let Some(ref mut w) = stdout {
+                if do_record {
                     let line = match ev {
                         EpisodeEvent::Start => "@START",
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Success } => "@SUCCESS",
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Fail } => "@FAIL",
                         EpisodeEvent::End { outcome: tr_messages::EpisodeOutcome::Rerecord } => "@RERECORD",
                     };
-                    writeln!(w, "{line}")?;
+                    writeln!(stdout, "{line}")?;
+                    stdout.flush()?;
                 }
             }
 
@@ -114,10 +111,11 @@ fn main() -> anyhow::Result<()> {
                 if joint_rad.len() < 6 { continue; }
 
                 // ── recording pipe ─────────────────────────────
-                if let Some(ref mut w) = stdout {
-                    write!(w, "D")?;
-                    for v in &joint_rad { write!(w, " {:.6}", v)?; }
-                    writeln!(w)?;
+                if do_record {
+                    write!(stdout, "D")?;
+                    for v in &joint_rad { write!(stdout, " {:.6}", v)?; }
+                    writeln!(stdout)?;
+                    stdout.flush()?;
                 }
                 // ───────────────────────────────────────────────
 
@@ -158,9 +156,9 @@ fn main() -> anyhow::Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    if let Some(mut w) = stdout {
-        let _ = writeln!(w, "@STOP");
-        let _ = w.flush();
+    if do_record {
+        let _ = writeln!(stdout, "@STOP");
+        let _ = stdout.flush();
     }
     result?;
     Ok(())
