@@ -9,7 +9,7 @@ nodes:
       TR_ARM_ID: "${TR_ARM_ID:-arm_1}"
 
   - id: recorder
-    path: python
+    path: training/.venv/bin/python
     args: -m tr_lerobot.recorder
     inputs:
       action: capture/action
