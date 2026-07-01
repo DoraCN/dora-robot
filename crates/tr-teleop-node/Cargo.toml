@@ -5,7 +5,12 @@ edition.workspace = true
 license.workspace = true
 description = "DORA node: teleop device -> canonical command -> bridge."
 
-# Real DORA wiring: add `dora-node-api`.
 [dependencies]
-tr-teleop.workspace = true
 tr-messages.workspace = true
+tr-teleop.workspace = true
+tr-codec.workspace = true
+tr-so101.workspace = true
+dora-node-api = "0.5.0"
+futures = "0.3"
+eyre = "0.6"
+tokio = { version = "1", features = ["rt"] }

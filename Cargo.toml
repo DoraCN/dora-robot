@@ -32,3 +32,5 @@ tr-transport = { path = "crates/tr-transport" }
 tr-session = { path = "crates/tr-session" }
 tr-teleop = { path = "crates/tr-teleop" }
 tr-robot = { path = "crates/tr-robot" }
+tr-codec = { path = "crates/tr-codec" }
+tr-so101 = { path = "crates/tr-so101" }
