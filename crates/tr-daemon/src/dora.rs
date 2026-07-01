@@ -3,9 +3,33 @@
 //! The daemon manages dataflow start/stop via the `dora` CLI
 //! (system-installed, assumed on PATH).  The dataflow runs only
 //! while torque is ON (Ready + Recording); it is stopped on TorqueOff.
+//!
+//! Python nodes in the dataflow need the project's venv Python on PATH,
+//! so we prepend `training/.venv/bin` when launching dora.
 
 use crate::config::DaemonConfig;
 use std::process::{Child, Command};
+
+/// Prepend the project venv to a command's PATH so DORA spawns Python
+/// nodes with the correct interpreter.
+fn with_venv_path(cmd: &mut Command) -> &mut Command {
+    if let Some(venv) = venv_dir() {
+        let venv_bin = format!("{venv}/bin");
+        let current_path = std::env::var_os("PATH")
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        cmd.env("PATH", format!("{venv_bin}:{current_path}"))
+            .env("VIRTUAL_ENV", &venv);
+    }
+    cmd
+}
+
+fn venv_dir() -> Option<String> {
+    std::env::current_dir()
+        .ok()
+        .map(|d| d.join("training").join(".venv"))
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+}
 
 pub struct DoraFlow {
     _child: Option<Child>,
@@ -18,11 +42,11 @@ impl DoraFlow {
         let _ = id;
 
         // dora up (ignore errors if already running)
-        let _ = Command::new("dora")
+        let _ = with_venv_path(&mut Command::new("dora"))
             .args(["up"])
             .status();
 
-        let child = Command::new("dora")
+        let child = with_venv_path(&mut Command::new("dora"))
             .args(["start", "dataflows/record.yml", "--name", &format!("record-{}", id)])
             .spawn()
             .map_err(|e| anyhow::anyhow!("failed to launch dora dataflow: {}", e))?;
@@ -39,7 +63,7 @@ impl DoraFlow {
             let _ = child.wait();
         }
         // dora destroy (best-effort)
-        let _ = Command::new("dora")
+        let _ = with_venv_path(&mut Command::new("dora"))
             .args(["destroy"])
             .status();
         Ok(())
