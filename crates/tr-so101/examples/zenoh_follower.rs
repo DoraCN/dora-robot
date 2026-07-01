@@ -17,6 +17,7 @@
 
 use feetech_servo_sdk::{ControlOp, FeetechBus, MotorBus};
 use std::io::{self, Write};
+use std::mem::ManuallyDrop;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tr_codec::PostcardCodec;
@@ -48,13 +49,13 @@ fn main() -> anyhow::Result<()> {
     // Control subscription.
     let mut transport_ctrl = ZenohTransport::subscriber(rt.handle(), &key_control)?;
 
-    // Episode subscription (raw zenoh session, separate from control).
+    // Episode subscription (raw zenoh session, kept alive via ManuallyDrop).
     let (ep_tx, ep_rx) = mpsc::channel::<EpisodeEvent>();
-    if do_record {
+    let _ep_keep: Option<ManuallyDrop<Box<dyn std::any::Any + Send>>> = if do_record {
         let session = rt.block_on(async {
             zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
         })?;
-        rt.block_on(async {
+        let sub = rt.block_on(async {
             session.declare_subscriber(key_episode.as_str())
                 .callback({
                     let codec = PostcardCodec;
@@ -68,7 +69,10 @@ fn main() -> anyhow::Result<()> {
                 })
                 .await.map_err(|e| anyhow::anyhow!("{e}"))
         })?;
-    }
+        Some(ManuallyDrop::new(Box::new((session, sub))))
+    } else {
+        None
+    };
 
     // Output pipe — line-buffered directly (no BufWriter, lost on Ctrl‑C).
     let mut stdout = io::stdout();
