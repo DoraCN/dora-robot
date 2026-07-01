@@ -37,6 +37,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut first = true;
     let mut count = 0u64;
+    let mut last_written = [0.0_f32; 6];
+    const DEDUP_THRESH: f32 = 0.002;
     println!("▶  Receiving (Ctrl‑C to stop)\n");
 
     loop {
@@ -48,6 +50,13 @@ fn main() -> anyhow::Result<()> {
                 _ => continue,
             };
             if joint_rad.len() < 6 { continue; }
+
+            if !first {
+                let max_d = joint_rad.iter().zip(last_written.iter())
+                    .map(|(a, b)| (a - b).abs()).fold(0.0_f32, f32::max);
+                if max_d < DEDUP_THRESH { continue; }
+            }
+            last_written.copy_from_slice(&joint_rad);
 
             let cmds: Vec<(u8, ControlOp)> = ids.iter()
                 .zip(joint_rad.iter())
