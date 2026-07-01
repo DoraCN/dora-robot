@@ -1,0 +1,12 @@
+[package]
+name = "tr-transport-zenoh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Zenoh backend for the tr-transport Transport trait."
+
+[dependencies]
+tr-transport = { workspace = true }
+zenoh = "1.9.0"
+tokio = { version = "1", features = ["rt"] }
+anyhow = "1"
