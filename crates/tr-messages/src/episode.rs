@@ -55,9 +55,10 @@ mod tests {
         let e = EpisodeEvent::End {
             outcome: EpisodeOutcome::Fail,
         };
-        match e {
-            EpisodeEvent::End { outcome } => assert_eq!(outcome, EpisodeOutcome::Fail),
-            EpisodeEvent::Start => unreachable!(),
+        if let EpisodeEvent::End { outcome } = e {
+            assert_eq!(outcome, EpisodeOutcome::Fail)
+        } else {
+            unreachable!()
         }
     }
 }
