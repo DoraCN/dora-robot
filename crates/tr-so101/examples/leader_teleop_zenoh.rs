@@ -1,23 +1,19 @@
 //! Real SO-101 leader → zenoh publisher (live teleop sender).
 //!
 //! Connects to the leader arm, disables torque (backdrivable), reads joint
-//! positions at ~45 Hz, and publishes postcard-encoded `JointTargets` over
-//! zenoh.  Optionally also writes a local CSV for recording/debug.
+//! positions at bus speed (~45 Hz), and publishes postcard-encoded
+//! `JointTargets` over zenoh.  Optionally also writes a local CSV for
+//! recording/debug.  Ctrl‑C to stop.
 //!
 //! Usage:
-//!   # publish only
 //!   cargo run -p tr-so101 --example leader_teleop_zenoh -- \
-//!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control]
-//!
-//!   # publish + record CSV
-//!   cargo run -p tr-so101 --example leader_teleop_zenoh -- \
-//!       /dev/cu.usbmodem5AB01836201 --output logs/my_session.csv
+//!       /dev/cu.usbmodem5AB01836201 [--key tr/csv/control] [--output logs/session.csv]
 
 use feetech_servo_sdk::{FeetechBus, MotorBus};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tr_codec::PostcardCodec;
 use tr_messages::{
     Codec, CommandBody, ControlMode, JointTargets, MessageHeader, TeleopCommand,
@@ -54,19 +50,14 @@ fn main() -> anyhow::Result<()> {
     println!("  Ctrl‑C to stop");
     println!("────────────────────────────────────────────");
 
-    // -- Leader arm ----------------------------------------------------------
-    println!("🔗 Opening leader on {port} ...");
-    let rt = tokio::runtime::Runtime::new()?;
-    let _guard = rt.enter(); // FeetechBus needs a reactor context
-    let mut bus = FeetechBus::new(&port, 1_000_000)?;
-    rt.block_on(async { bus.disable_torque(&ids).await })?;
-    println!("   torque: OFF (backdrivable)");
-
-    // -- Zenoh ----------------------------------------------------------------
+    // -- Zenoh (create first — its own runtime, no conflict) -----------------
     println!("🔗 Opening zenoh publisher on {key} ...");
     let mut transport = ZenohTransport::publisher(&key)?;
 
-    // -- Optional CSV ---------------------------------------------------------
+    // -- Leader arm (wrapped in its own runtime) -----------------------------
+    let rt = tokio::runtime::Runtime::new()?;
+
+    // Optional CSV
     let mut csv: Option<BufWriter<File>> = csv_path
         .as_ref()
         .map(|p| BufWriter::new(File::create(p).expect("create csv")));
@@ -74,42 +65,47 @@ fn main() -> anyhow::Result<()> {
         writeln!(csv.as_mut().unwrap(), "seq stamp_nanos j1 j2 j3 j4 j5 j6")?;
     }
 
-    println!("\n▶  Publishing (Ctrl‑C to stop)\n");
-    let mut seq: u64 = 0;
-    let _t0 = Instant::now();
+    let result: anyhow::Result<()> = rt.block_on(async move {
+        println!("🔗 Opening leader on {port} ...");
+        // FeetechBus::new() is sync, but tokio-serial needs an active reactor.
+        // Inside block_on the runtime is active, so it works.
+        let mut bus = FeetechBus::new(&port, 1_000_000)?;
+        bus.disable_torque(&ids).await?;
+        println!("   torque: OFF (backdrivable)\n▶  Publishing (Ctrl‑C to stop)\n");
 
-    loop {
-        // Yield to Ctrl‑C (synchronous check via tiny sleep)
-        std::thread::sleep(Duration::from_millis(1));
+        let mut seq: u64 = 0;
+        loop {
+            let positions = bus.sync_read_positions(&ids).await?;
+            let stamp = now_nanos();
 
-        let positions = rt.block_on(async { bus.sync_read_positions(&ids).await })?;
-        let stamp = now_nanos();
+            let cmd = TeleopCommand {
+                header: MessageHeader::new(0, "leader", ControlMode::JointTargets),
+                body: CommandBody::Joint(JointTargets {
+                    positions: positions.iter().map(|&p| p as f64).collect(),
+                    velocities: None,
+                    efforts: None,
+                }),
+            };
+            let encoded = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
+            transport.send(Channel::Control, &encoded)?;
 
-        // Build canonical JointTargets
-        let cmd = TeleopCommand {
-            header: MessageHeader::new(0, "leader", ControlMode::JointTargets),
-            body: CommandBody::Joint(JointTargets {
-                positions: positions.iter().map(|&p| p as f64).collect(),
-                velocities: None,
-                efforts: None,
-            }),
-        };
-        let encoded = codec.encode_command(&cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
-        transport.send(Channel::Control, &encoded)?;
+            if let Some(ref mut w) = csv {
+                write!(w, "{seq} {stamp}")?;
+                for &p in &positions { write!(w, " {:.6}", p)?; }
+                writeln!(w)?;
+            }
 
-        // CSV
-        if let Some(ref mut w) = csv {
-            write!(w, "{seq} {stamp}")?;
-            for &p in &positions { write!(w, " {:.6}", p)?; }
-            writeln!(w)?;
+            seq += 1;
+            if seq % 100 == 0 {
+                print!("\r   frames: {seq}");
+                let _ = std::io::stdout().flush();
+            }
         }
+        #[allow(unreachable_code)]
+        Ok(())
+    });
 
-        seq += 1;
-        if seq % 100 == 0 {
-            print!("\r   frames: {seq}");
-            let _ = std::io::stdout().flush();
-        }
-    }
-    // Note: Ctrl‑C kills the process; the loop never exits cleanly.
-    // The bus and zenoh session are closed by the OS on process termination.
+    drop(transport);
+    result?;
+    Ok(())
 }
