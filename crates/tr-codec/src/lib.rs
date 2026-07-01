@@ -9,6 +9,7 @@ use tr_messages::{
     Codec, ControlCommand, EpisodeEvent, MessageError, RobotFeedback, TeleopCommand,
 };
 
+#[derive(Debug, Clone, Copy)]
 pub struct PostcardCodec;
 
 impl Codec for PostcardCodec {

@@ -5403,6 +5403,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tr-capture"
+version = "0.1.0"
+dependencies = [
+ "arrow 54.3.1",
+ "dora-node-api",
+ "eyre",
+ "futures",
+ "serde_json",
+ "tokio",
+ "tr-codec",
+ "tr-messages",
+ "tr-transport",
+ "tr-transport-zenoh",
+]
+
+[[package]]
 name = "tr-codec"
 version = "0.1.0"
 dependencies = [

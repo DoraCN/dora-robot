@@ -14,6 +14,7 @@ members = [
     "crates/tr-bridge",
     "crates/tr-policy",
     "crates/tr-daemon",
+    "crates/tr-capture",
 ]
 
 [workspace.package]

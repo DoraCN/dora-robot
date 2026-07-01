@@ -1,0 +1,18 @@
+[package]
+name = "tr-capture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DORA capture node: zenoh subscriber that bridges control/observation/command into DORA Arrow outputs."
+
+[dependencies]
+tr-messages = { workspace = true, features = ["serde"] }
+tr-codec.workspace = true
+tr-transport.workspace = true
+tr-transport-zenoh = { path = "../tr-transport-zenoh" }
+dora-node-api = "0.5.0"
+arrow = "54"
+futures = "0.3"
+eyre = "0.6"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+serde_json = "1"
