@@ -1,65 +1,23 @@
-# Robot machine — execute teleop commands AND record a LeRobotDataset v3.
-#
-# Recording runs on the ROBOT side: it already has the executed command (action),
-# local robot state (observation.state) and local cameras — so there is no need
-# to stream video back to the operator. The recorder is a DORA *Python* node that
-# drives lerobot's own v3 writer (conformance by construction).
-#
-# Run from the project root:
-#   dora up && dora start dataflows/record.yml
 nodes:
-  - id: bridge
-    path: target/release/tr-bridge
-    inputs:
-      feedback: robot/feedback
+  - id: capture
+    path: target/release/tr-capture
     outputs:
-      - command
+      - action
+      - observation_state
+      - episode_cmd
     env:
-      TR_TRANSPORT: tcp
-      TR_ROLE: server
-      TR_BIND: "0.0.0.0:9000"
-
-  - id: robot
-    path: target/release/tr-robot-node
-    inputs:
-      command: bridge/command
-      tick: dora/timer/millis/5
-    outputs:
-      - feedback              # full RobotFeedback (state/wrench/status)
-      - action               # executed canonical action, flattened float32[]
-      - observation_state    # joint state, flattened float32[]
-
-  - id: camera_front
-    # A DEDICATED DORA camera node (one per camera). It acquires frames itself —
-    # NOT the Rust servo node, NOT the recorder. Output `image` MUST be a flat
-    # uint8 HWC buffer with metadata {width,height,encoding,stamp_nanos}; send RAW
-    # frames (not JPEG) on this local hop so lerobot encodes MP4 directly.
-    # Use a DORA OpenCV/RealSense camera node (community node or a small custom one).
-    path: python
-    args: -m dora_camera_placeholder      # TODO: replace with your camera node
-    outputs:
-      - image
+      TR_ARM_ID: "${TR_ARM_ID:-arm_1}"
 
   - id: recorder
     path: python
     args: -m tr_lerobot.recorder
     inputs:
-      action: robot/action
-      observation_state: robot/observation_state
-      observation_images_front: camera_front/image
-      # episode_end: <wire an episode-boundary control signal here>
+      action: capture/action
+      observation_state: capture/observation_state
+      episode_cmd: capture/episode_cmd
     env:
       PYTHONPATH: "training"
       LEROBOT_REPO_ID: "local/teleop"
       LEROBOT_ROOT: "./datasets"
       LEROBOT_FPS: "30"
-      LEROBOT_TASK: "Grab the black cube"
-      LEROBOT_ROBOT_TYPE: "generic"
-      TR_ACTION_DIM: "6"
-      TR_STATE_DIM: "6"
-      TR_CAMERAS: "front:480x640"      # primary camera = first entry = dataset fps clock
-      TR_CAM_BGR: "true"               # OpenCV frames are BGR → recorder converts to RGB
-      TR_STREAMING_ENCODING: "true"    # live MP4 encode (docs/recording-video-encoding-performance.md)
-      TR_ENCODER_QUEUE: "30"
-      TR_BATCH_ENCODING: "1"
-      # TR_ENCODER_THREADS: "2"        # unset = let the codec decide
+      LEROBOT_TASK: "${TR_TASK:-teleop}"
