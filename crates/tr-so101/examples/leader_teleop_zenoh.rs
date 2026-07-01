@@ -76,9 +76,19 @@ fn main() -> anyhow::Result<()> {
     }
 
     let mut seq: u64 = 0;
+    let mut last_positions = [0.0_f32; 6];
     loop {
         std::thread::sleep(Duration::from_millis(1));
-        let positions = rt_arm.block_on(async { bus.sync_read_positions(&ids).await })?;
+        let positions = match rt_arm.block_on(async { bus.sync_read_positions(&ids).await }) {
+            Ok(p) => {
+                last_positions.copy_from_slice(&p);
+                p
+            }
+            Err(e) => {
+                eprintln!("[warn] read error (using last): {e}");
+                last_positions.to_vec() // fall back to last known good
+            }
+        };
         let stamp = now_nanos();
 
         let cmd = TeleopCommand {
