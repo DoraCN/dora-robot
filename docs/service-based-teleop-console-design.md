@@ -50,19 +50,35 @@ dora-robot/
 ```toml
 # config/follower.toml — 从臂
 [arm]
-id = "arm_1"
-port = "/dev/cu.usbmodem5A7A0555021"
+id = "arm_1"                # 臂对实例标识，必须和主臂一致
+type = "so101"              # 硬件型号
+
+[arm.so101]
 baud = 1_000_000
+ids = [1, 2, 3, 4, 5, 6]
+vid = "0x0483"              # STMicroelectronics (STM32 CDC)
+pid = "0x5740"              # STM32 Virtual COM Port
+serial = "5A7A0555021"      # 生产环境必填，精确匹配
 
 # config/leader.toml — 主臂
 [arm]
-id = "arm_1"             # 必须和从臂一致
-port = "/dev/cu.usbmodem5AB01836201"
+id = "arm_1"                # 必须和从臂一致
+type = "so101"
+
+[arm.so101]
 baud = 1_000_000
+ids = [1, 2, 3, 4, 5, 6]
+vid = "0x0483"
+pid = "0x5740"
+serial = "5AB01836201"
 
 [console]
-bind = "0.0.0.0:8080"    # web 控制台监听地址
+bind = "0.0.0.0:8080"       # web 控制台监听地址
 ```
+
+`arm.id` 区分不同臂对（隔离 zenoh 通道）；`arm.type` 指定硬件型号，程序据此读取 `[arm.<type>]` 段来初始化硬件和解析 USB 路径（详见 `docs/usb-resolver-integration.md`）。
+
+硬件参数（`baud`, `ids`, `vid`, `pid`, `serial`）只和臂型号相关，所有同型号臂配置相同。换型号时整体替换该段。
 
 优先级：**CLI `--config` > 环境变量 `TR_ARM_ID` > `config/follower.toml`**。
 
@@ -197,25 +213,39 @@ zenoh 通道隔离不同臂对：`tr/<id>/control`、`tr/<id>/command`、`tr/<id
 
 ## 7. 从臂掉线自动重连
 
-从臂 daemon 检测到 FeetechBus 断开（读写超时/权限丢失）：
+### 7.1 Bus 断开（读写超时/权限丢失）
+
+从臂 daemon 检测到 FeetechBus 断开：
 
 1. 状态机 → IDLE，通知操作台 "从臂离线"（pub status）
 2. 指数退避重试连接 FeetechBus（1s → 2s → 4s → 最长 30s）
 3. 重连成功 → IDLE，通知操作台 "从臂在线"
 4. 重连后状态机回到 IDLE（扭矩 OFF），需操作员重新 [上力]
 
+### 7.2 USB 热插拔（最后实现）
+
+通过 `usb_resolver::DeviceMonitor::start()` 监听设备插拔事件：
+
+1. `DeviceEvent::Attached` → 解析新路径 → 自动打开 FeetechBus → 恢复 IDLE
+2. `DeviceEvent::Detached` → 同 7.1 断线流程
+
+> 优先级低，先做启动时冷扫描（`scan_now()`）。
+
 ---
 
 ## 8. 文件和改动
 
 | 新增 | 说明 |
-|---|---|
+|---|---|---|
 | `crates/tr-daemon/` | 守护进程库（状态机、command/status 处理） |
 | `crates/tr-daemon/src/bin/follower.rs` | 从臂 daemon 入口 |
 | `crates/tr-daemon/src/bin/leader.rs` | 主臂 daemon + axum web 入口 |
+| `crates/tr-so101/src/resolver.rs` | USB 设备路径自动发现 |
+| `crates/tr-so101/examples/usb_scan.rs` | USB 设备扫描诊断工具 |
 | `web/` | React 前端（Vite 构建，输出到 `web/dist/`） |
-| `config/follower.toml` `config/leader.toml` | 配置文件 |
+| `config/follower.toml` `config/leader.toml` | 配置文件（含 `[arm.so101]` USB 发现规则） |
 | `tr-messages` | 新增 `ControlCommand` 枚举、`Status` 结构 |
+| `docs/usb-resolver-integration.md` | USB 解析器技术方案 |
 
 | 保留不变 | 说明 |
 |---|---|
@@ -235,15 +265,7 @@ zenoh 通道隔离不同臂对：`tr/<id>/control`、`tr/<id>/command`、`tr/<id
 | 3 | 配置位置 | 项目目录 `config/` |
 | 4 | Python 环境 | 项目内 venv（`training/.venv`），不二进制打包 |
 | 5 | 掉线恢复 | 自动重连 + 通知操作台 |
-
-## 10. 已全部拍板
-
-| # | 决策 | 结论 |
-|---|---|---|
-| 1 | Web 框架 | `axum`（Rust 异步，和 daemon 同进程） |
-| 2 | 前端 | React → 独立构建，产物内嵌 |
-| 3 | 配置位置 | 项目目录 `config/` |
-| 4 | Python 环境 | 项目内 venv（`training/.venv`），不二进制打包 |
-| 5 | 掉线恢复 | 自动重连 + 通知操作台 |
 | 6 | React 目录 | `web/` 子目录 |
 | 7 | 部署方式 | 从臂机器预装 Rust + Python venv **且** CI 出二进制 + 一键部署脚本 |
+| 8 | USB 发现 | 用 `usb-resolver` 自动发现，硬件参数收归 `[arm.so101]`，不硬编码路径 |
+| 9 | USB 热插拔 | 最后实现，先做启动时冷扫描 |
