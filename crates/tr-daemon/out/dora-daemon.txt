@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-01T12:05:05.355654Z","level":"INFO","fields":{"message":"Connected to dora-coordinator at ws://127.0.0.1:6013/api/daemon"},"target":"dora_daemon::coordinator"}
+{"timestamp":"2026-07-01T12:05:05.364775Z","level":"INFO","fields":{"message":"Using ZID: e7cf9cf635c7a1f3a9d2ed7fd3bed627"},"target":"zenoh::net::runtime"}
+{"timestamp":"2026-07-01T12:05:05.374755Z","level":"INFO","fields":{"message":"Zenoh can be reached at: tcp/127.0.0.1:63466"},"target":"zenoh::net::runtime::orchestrator"}
+{"timestamp":"2026-07-01T12:05:05.375936Z","level":"INFO","fields":{"message":"zenohd listening scout messages on 224.0.0.224:7446"},"target":"zenoh::net::runtime::orchestrator"}
