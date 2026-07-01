@@ -62,6 +62,16 @@ impl<B: MotorBus> So101Follower<B> {
         }
     }
 
+    /// Access the inner bus for direct torque control.
+    pub fn bus_mut(&mut self) -> &mut B {
+        self.arm.bus_mut()
+    }
+
+    /// Access the inner arm for direct read/write.
+    pub fn arm_mut(&mut self) -> &mut So101Arm<B> {
+        &mut self.arm
+    }
+
     fn header(&mut self, mode: ControlMode) -> MessageHeader {
         let mut h = MessageHeader::new(self.session_id, &self.source_id, mode);
         h.seq = self.seq;

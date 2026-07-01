@@ -6,7 +6,7 @@
 //! `tr-messages` `serde` feature is on (see `constitution.md` C8/K3).
 
 use tr_messages::{
-    Codec, EpisodeEvent, MessageError, RobotFeedback, TeleopCommand,
+    Codec, ControlCommand, EpisodeEvent, MessageError, RobotFeedback, TeleopCommand,
 };
 
 pub struct PostcardCodec;
@@ -28,6 +28,18 @@ impl Codec for PostcardCodec {
         postcard::to_stdvec(ev).map_err(|e| MessageError::Decode(e.to_string()))
     }
     fn decode_episode(&self, bytes: &[u8]) -> Result<EpisodeEvent, MessageError> {
+        postcard::from_bytes(bytes).map_err(|e| MessageError::Decode(e.to_string()))
+    }
+    fn encode_control_command(&self, cmd: &ControlCommand) -> Result<Vec<u8>, MessageError> {
+        postcard::to_stdvec(cmd).map_err(|e| MessageError::Decode(e.to_string()))
+    }
+    fn decode_control_command(&self, bytes: &[u8]) -> Result<ControlCommand, MessageError> {
+        postcard::from_bytes(bytes).map_err(|e| MessageError::Decode(e.to_string()))
+    }
+    fn encode_observation(&self, obs: &[f32]) -> Result<Vec<u8>, MessageError> {
+        postcard::to_stdvec(obs).map_err(|e| MessageError::Decode(e.to_string()))
+    }
+    fn decode_observation(&self, bytes: &[u8]) -> Result<Vec<f32>, MessageError> {
         postcard::from_bytes(bytes).map_err(|e| MessageError::Decode(e.to_string()))
     }
 }
@@ -111,5 +123,45 @@ mod tests {
         let bytes = codec().encode_episode(&ev).unwrap();
         let decoded = codec().decode_episode(&bytes).unwrap();
         assert_eq!(decoded, ev);
+    }
+
+    #[test]
+    fn control_command_roundtrip_torque_on() {
+        let cmd = ControlCommand::TorqueOn;
+        let bytes = codec().encode_control_command(&cmd).unwrap();
+        let decoded = codec().decode_control_command(&bytes).unwrap();
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn control_command_roundtrip_start_record() {
+        let cmd = ControlCommand::StartRecord { task: "grab".into() };
+        let bytes = codec().encode_control_command(&cmd).unwrap();
+        let decoded = codec().decode_control_command(&bytes).unwrap();
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn control_command_roundtrip_end_record() {
+        let cmd = ControlCommand::EndRecord { outcome: EpisodeOutcome::Fail };
+        let bytes = codec().encode_control_command(&cmd).unwrap();
+        let decoded = codec().decode_control_command(&bytes).unwrap();
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn observation_roundtrip() {
+        let obs = vec![0.1, -0.2, 0.3, 0.0, -0.5, 0.7];
+        let bytes = codec().encode_observation(&obs).unwrap();
+        let decoded = codec().decode_observation(&bytes).unwrap();
+        assert_eq!(decoded, obs);
+    }
+
+    #[test]
+    fn observation_roundtrip_empty() {
+        let obs: Vec<f32> = vec![];
+        let bytes = codec().encode_observation(&obs).unwrap();
+        let decoded = codec().decode_observation(&bytes).unwrap();
+        assert!(decoded.is_empty());
     }
 }

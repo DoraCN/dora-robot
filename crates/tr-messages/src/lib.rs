@@ -18,6 +18,7 @@ pub mod header;
 pub use capability::{Capabilities, GripperSpec, Negotiated};
 pub use codec::{Codec, PlaceholderCodec};
 pub use command::{CartesianTarget, CommandBody, GripperCommand, JointTargets, TeleopCommand};
+pub use control::{ControlCommand, DaemonStatus};
 pub use episode::{EpisodeEvent, EpisodeOutcome};
 pub use error::MessageError;
 pub use feedback::{

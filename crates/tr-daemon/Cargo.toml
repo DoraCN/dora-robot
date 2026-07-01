@@ -8,6 +8,8 @@ description = "Daemon library and binaries for SO-101 teleoperation management."
 [dependencies]
 tr-messages = { workspace = true, features = ["serde"] }
 tr-so101.workspace = true
+tr-robot.workspace = true
+tr-teleop.workspace = true
 tr-codec.workspace = true
 tr-transport.workspace = true
 tr-transport-zenoh = { path = "../tr-transport-zenoh" }
