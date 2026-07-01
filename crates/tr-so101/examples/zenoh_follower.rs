@@ -21,7 +21,9 @@ fn main() -> anyhow::Result<()> {
     println!("🔗 Opening zenoh subscriber ...");
     let mut transport = ZenohTransport::subscriber("tr/csv/control")?;
 
-    let rt = tokio::runtime::Builder::new_current_thread()
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_io()
         .enable_time()
         .build()?;
 
