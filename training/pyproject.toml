@@ -5,12 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "tr-lerobot"
 version = "0.1.0"
-description = "dora-robot <-> LeRobot v3 bridge: recorder (DORA Python node), conformance validation, training."
+description = "dora-robot -> LeRobot v3 bridge: recorder, conformance validation, training."
 requires-python = ">=3.10"
 dependencies = [
-    # See requirements.txt for the pinned lerobot pre-release (v3 support).
-    "dora-rs>=0.3",
-    "pyarrow>=15",
+    # Installed from the local .leon/lerobot-main source (see requirements.txt).
+    "lerobot",
     "numpy>=1.24",
 ]
 
