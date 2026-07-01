@@ -64,7 +64,6 @@ impl ZenohTransport {
                 .declare_subscriber(key.as_str())
                 .callback(move |sample| {
                     let payload = sample.payload().to_bytes().to_vec();
-                    eprintln!("[zenoh-sub] rx {} bytes on {}", payload.len(), sample.key_expr());
                     let _ = tx.send((Channel::Control, payload));
                 })
                 .await

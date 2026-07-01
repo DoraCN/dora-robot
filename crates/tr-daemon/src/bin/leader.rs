@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io;
 use std::time::Duration;
 use tr_codec::PostcardCodec;
 use tr_daemon::config::DaemonConfig;
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     let rt_arm = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1).enable_io().enable_time().build()?;
     let rt_zenoh = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().enable_time().build()?;
+        .worker_threads(4).enable_io().enable_time().build()?;
 
     let _guard = rt_arm.enter();
     let bus = FeetechBus::new(&port, config.arm.so101.baud)?;
@@ -97,10 +97,9 @@ fn main() -> anyhow::Result<()> {
             };
 
         if let Some(cmd) = cmd {
-            eprintln!("[leader] sending {:?}", cmd);
             if let Ok(bytes) = codec.encode_control_command(&cmd) {
                 match t_cmd.send(tr_transport::qos::Channel::Control, &bytes) {
-                    Ok(_) => println!("  -> {:?} (ok)", cmd),
+                    Ok(_) => println!("  -> {:?}", cmd),
                     Err(e) => eprintln!("  -> {:?} FAIL: {e}", cmd),
                 }
             } else {
