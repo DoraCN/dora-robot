@@ -54,6 +54,8 @@ impl Default for JointCalib {
 pub struct So101Config {
     pub ids: [u8; DOF],
     pub joints: [JointCalib; DOF],
+    /// Maximum per-tick joint change (rad/tick) — global slew limit (M10).
+    pub max_slew_rad: f32,
 }
 
 impl Default for So101Config {
@@ -61,6 +63,7 @@ impl Default for So101Config {
         Self {
             ids: [1, 2, 3, 4, 5, 6],
             joints: [JointCalib::default(); DOF],
+            max_slew_rad: 0.05236_f32, // 3° ≈ 300°/s @100Hz
         }
     }
 }

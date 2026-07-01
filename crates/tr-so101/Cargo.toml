@@ -10,9 +10,13 @@ description = "SO-101 arm hardware abstraction: So101Arm over feetech MotorBus (
 # the MockBus for hardware-free tests/sim.
 [dependencies]
 feetech-servo-sdk = "0.3.0"
+tr-messages.workspace = true
+tr-teleop.workspace = true
+tr-robot.workspace = true
+tokio = { version = "1", features = ["rt"] }
 
 [features]
 mock = ["feetech-servo-sdk/mock"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "macros"] }
