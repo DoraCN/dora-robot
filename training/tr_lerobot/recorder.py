@@ -138,6 +138,9 @@ class Recorder:
         self._image_keys = self.spec.image_keys()
         self._latest: dict[str, np.ndarray] = {}
         self._frames_in_episode = 0
+        # No-camera decimation (M7/G2): control ≈100 Hz → dataset 30 Hz.
+        self._decimate = max(1, round(100.0 / max(1, cfg.fps)))
+        self._action_tick = 0
 
     def update(self, key: str, array: np.ndarray) -> None:
         self._latest[key] = array
@@ -211,8 +214,10 @@ def main() -> None:
 
         if input_id == "action":
             rec.update("action", _vec_f32(event["value"]))
-            if primary is None:  # state-only dataset: action is the clock
-                rec.record_frame()
+            if primary is None:  # state-only: decimate action stream → dataset fps
+                rec._action_tick += 1
+                if rec._action_tick % rec._decimate == 0:
+                    rec.record_frame()
         elif input_id == "observation_state":
             rec.update("observation.state", _vec_f32(event["value"]))
         else:
