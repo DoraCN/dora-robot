@@ -1,8 +1,12 @@
 //! Capability descriptors and handshake negotiation (WebRTC-style offer/answer).
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::header::ControlMode;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GripperSpec {
     pub max_force: f64,
     pub stroke: f64,
@@ -10,6 +14,7 @@ pub struct GripperSpec {
 
 /// Advertised by both the teleop device and the robot driver before streaming.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Capabilities {
     pub dof: u32,
     pub supported_modes: Vec<ControlMode>,
@@ -22,6 +27,7 @@ pub struct Capabilities {
 
 /// The agreed parameters for a session, computed from both ends' capabilities.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Negotiated {
     pub mode: ControlMode,
     pub rate_hz: u32,

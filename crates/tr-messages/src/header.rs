@@ -1,5 +1,8 @@
 //! Message header shared by every command and feedback message.
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Negotiated, per-session identifier.
 pub type SessionId = u64;
 
@@ -9,6 +12,7 @@ pub const PROTOCOL_VERSION: u16 = 1;
 
 /// The semantic space a command/stream is expressed in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ControlMode {
     /// End-effector Cartesian pose (default for heterogeneous master/slave & VR).
     CartesianPose,
@@ -25,6 +29,7 @@ pub enum ControlMode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MessageHeader {
     pub protocol_version: u16,
     pub session_id: SessionId,

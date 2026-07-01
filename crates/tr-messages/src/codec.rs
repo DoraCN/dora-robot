@@ -6,6 +6,7 @@
 //! The [`crate::header::PROTOCOL_VERSION`] field gates incompatibilities.
 
 use crate::command::TeleopCommand;
+use crate::episode::EpisodeEvent;
 use crate::error::MessageError;
 use crate::feedback::RobotFeedback;
 
@@ -14,6 +15,8 @@ pub trait Codec: Send + Sync {
     fn decode_command(&self, bytes: &[u8]) -> Result<TeleopCommand, MessageError>;
     fn encode_feedback(&self, fb: &RobotFeedback) -> Result<Vec<u8>, MessageError>;
     fn decode_feedback(&self, bytes: &[u8]) -> Result<RobotFeedback, MessageError>;
+    fn encode_episode(&self, ev: &EpisodeEvent) -> Result<Vec<u8>, MessageError>;
+    fn decode_episode(&self, bytes: &[u8]) -> Result<EpisodeEvent, MessageError>;
 }
 
 /// Placeholder; wire it to a real serializer before going on-air.
@@ -31,6 +34,12 @@ impl Codec for PlaceholderCodec {
         Err(MessageError::CodecUnimplemented)
     }
     fn decode_feedback(&self, _bytes: &[u8]) -> Result<RobotFeedback, MessageError> {
+        Err(MessageError::CodecUnimplemented)
+    }
+    fn encode_episode(&self, _ev: &EpisodeEvent) -> Result<Vec<u8>, MessageError> {
+        Err(MessageError::CodecUnimplemented)
+    }
+    fn decode_episode(&self, _bytes: &[u8]) -> Result<EpisodeEvent, MessageError> {
         Err(MessageError::CodecUnimplemented)
     }
 }

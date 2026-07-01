@@ -8,3 +8,7 @@ description = "Canonical, device- and robot-agnostic teleoperation message contr
 # std-only skeleton. Production: add `serde` + a wire codec
 # (`prost`/`flatbuffers`/`postcard`) and feature-gate it.
 [dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]

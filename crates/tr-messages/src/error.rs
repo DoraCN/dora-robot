@@ -1,8 +1,12 @@
 //! Contract-level errors.
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MessageError {
     CodecUnimplemented,
     Decode(String),

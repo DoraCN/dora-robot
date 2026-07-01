@@ -1,10 +1,14 @@
 //! Operator -> robot canonical commands.
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::geometry::{Pose, Twist};
 use crate::header::MessageHeader;
 
 /// End-effector pose in a named reference frame.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CartesianTarget {
     pub frame: String,
     pub pose: Pose,
@@ -12,6 +16,7 @@ pub struct CartesianTarget {
 
 /// Per-joint targets. `velocities`/`efforts` are optional feed-forward terms.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct JointTargets {
     pub positions: Vec<f64>,
     pub velocities: Option<Vec<f64>>,
@@ -20,6 +25,7 @@ pub struct JointTargets {
 
 /// Normalized gripper command (`position`/`force` in 0.0..=1.0).
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GripperCommand {
     pub position: f64,
     pub force: Option<f64>,
@@ -28,6 +34,7 @@ pub struct GripperCommand {
 /// The semantic payload of a command. Retargeting/IK never appear here — they
 /// happen at the edges (teleop adapter or robot driver).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CommandBody {
     Cartesian(CartesianTarget),
     Joint(JointTargets),
@@ -42,6 +49,7 @@ pub enum CommandBody {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TeleopCommand {
     pub header: MessageHeader,
     pub body: CommandBody,

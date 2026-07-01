@@ -1,0 +1,11 @@
+[package]
+name = "tr-codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Postcard-based Codec implementations for the canonical message contract (tr-messages)."
+
+[dependencies]
+tr-messages = { workspace = true, features = ["serde"] }
+serde = "1"
+postcard = { version = "1", features = ["use-std"] }

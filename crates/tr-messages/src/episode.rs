@@ -5,8 +5,12 @@
 //! call on lerobot's writer. **Persistence itself is lerobot's domain, not this
 //! project** (see `docs/specs/001-so101-teleop-record/spec.md` §5/§6).
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// What to do with the just-ended episode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EpisodeOutcome {
     /// Keep it — the recorder calls the writer's *save*.
     Success,
@@ -25,6 +29,7 @@ impl EpisodeOutcome {
 
 /// Episode boundary signal from the operator-control node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EpisodeEvent {
     /// Begin a new episode.
     Start,
