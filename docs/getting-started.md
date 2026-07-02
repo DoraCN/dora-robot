@@ -1,64 +1,105 @@
 # SO-101 遥操作数据采集 — 新手操作指南
 
-> 从零开始，一台全新的 macOS 机器，跑通主从臂遥操作 + DORA 数据流录制 + 摄像头采集的完整链路。
+> 从零开始，一台全新的机器，跑通主从臂遥操作 + DORA 数据流录制 + 摄像头采集的完整链路。
 
 ---
 
 ## 0. 环境安装
 
-### 0.1 Xcode Command Line Tools
+### 0.1 基础工具
 
-```bash
-xcode-select --install
-```
+| 工具 | macOS | Linux (Debian/Ubuntu) | Windows |
+|---|---|---|---|
+| 系统工具 | `xcode-select --install` | `sudo apt install build-essential curl pkg-config` | 安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)，勾选"使用 C++ 的桌面开发" |
 
 ### 0.2 Rust
 
+三平台相同：
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# 选默认选项，安装后重新打开终端
+# 选默认选项 (1)，安装后重新打开终端
 rustc --version   # 应 ≥ 1.88
 ```
 
-### 0.3 uv（Python 包管理 + venv）
+### 0.3 Git + Git LFS
+
+| 平台 | 命令 |
+|---|---|
+| macOS | `brew install git git-lfs` |
+| Linux | `sudo apt install git git-lfs` |
+| Windows | `winget install Git.Git Git.Git.LFS` |
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+git lfs install
+```
+
+### 0.4 uv（Python 包管理 + venv）
+
+| 平台 | 命令 |
+|---|---|
+| macOS / Linux | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Windows | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+
+```bash
 # 重新打开终端
 uv --version
 ```
 
-### 0.4 Git LFS
-
-```bash
-brew install git-lfs
-git lfs install
-```
-
 ### 0.5 DORA CLI
 
+从 GitHub Releases 下载二进制：
+
+| 操作系统 | 下载文件 |
+|---|---|
+| macOS (Apple Silicon) | `dora-cli-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `dora-cli-x86_64-apple-darwin.tar.gz` |
+| Linux (x86_64) | `dora-cli-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (ARM) | `dora-cli-aarch64-unknown-linux-gnu.tar.gz` |
+| Windows | `dora-cli-x86_64-pc-windows-msvc.zip` |
+
 ```bash
-# 从 GitHub Releases 下载二进制
-# 以 1.0.0-rc1 为例，根据架构选对应文件：
-curl -L https://github.com/dora-rs/dora/releases/download/v1.0.0-rc1/dora-cli-aarch64-apple-darwin.tar.gz \
-  -o /tmp/dora.tar.gz
+# macOS / Linux
+curl -L "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc1/<文件名>" -o /tmp/dora.tar.gz
 tar -xzf /tmp/dora.tar.gz -C /tmp
+mkdir -p ~/.local/bin
 cp /tmp/dora ~/.local/bin/dora
 chmod +x ~/.local/bin/dora
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
 
-# 确保 ~/.local/bin 在 PATH 中
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+```powershell
+# Windows (PowerShell 管理员)
+$url = "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc1/dora-cli-x86_64-pc-windows-msvc.zip"
+Invoke-WebRequest $url -OutFile $env:TEMP\dora.zip
+Expand-Archive $env:TEMP\dora.zip -DestinationPath $env:LOCALAPPDATA\dora
+[Environment]::SetEnvironmentVariable("Path", "$env:LOCALAPPDATA\dora;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
+```
+
+验证：
+
+```bash
 dora --version   # dora-cli 1.0.0-rc1
 ```
 
 ### 0.6 maturin（构建 DORA Python 包）
 
 ```bash
-# maturin 是 Rust 工具，用 cargo 安装
 cargo install maturin
 maturin --version
 ```
+
+### 0.7 Linux 额外依赖
+
+```bash
+# USB 设备监控 (usb-resolver crate)
+sudo apt install libudev-dev
+```
+
+### 0.8 macOS 额外依赖
+
+无需额外操作。
 
 ---
 
@@ -80,17 +121,22 @@ cd dora && git checkout v1.0.0-rc1 && cd ..
 ```bash
 # 创建 venv（gitignored）
 uv venv training/.venv --python 3.12
-source training/.venv/bin/activate
 
-# 安装 Python 依赖
+# 安装 Python 依赖（macOS / Linux）
+source training/.venv/bin/activate
+# Windows:
+#   training\.venv\Scripts\activate
+
 uv pip install numpy opencv-python pyarrow pyyaml
 uv pip install lerobot          # 含 torch，约 2GB
 
 # 安装 DORA Python 包（从本地源码构建）
 cd dora
 maturin build -m apis/python/node/Cargo.toml --release
-uv pip install --python ../training/.venv/bin/python \
-  target/wheels/dora_rs-1.0.0rc1-*.whl
+# macOS / Linux:
+uv pip install --python ../training/.venv/bin/python target/wheels/dora_rs-1.0.0rc1-*.whl
+# Windows:
+#   uv pip install --python ..\training\.venv\Scripts\python.exe target\wheels\dora_rs-1.0.0rc1-*.whl
 cd ..
 ```
 
@@ -101,23 +147,22 @@ cd ..
 ### 3.1 发现设备
 
 ```bash
-# 扫描 USB 设备，获取 VID/PID/Serial
 cargo run -p tr-so101 --example usb_scan
 ```
 
-输出示例（找带有 `/dev/cu.usbmodem` 的设备）：
+**macOS**：找 `/dev/cu.usbmodemXXXX` 的设备。
+**Linux**：找 `/dev/ttyUSB0` 或 `/dev/ttyACM0` 的设备。
+**Windows**：找 `COM3` 等串口设备。
+
+输出示例：
 
 ```
-Device 11:
-  VID   : 0x1A86
-  PID   : 0x55D3
-  Serial: 5A7A055502
-  Dev   : /dev/cu.usbmodem5A7A0555021
+Device:  VID 0x1A86  PID 0x55D3  Serial: 5A7A055502  Dev: /dev/cu.usbmodem5A7A0555021
 ```
 
 ### 3.2 编辑配置文件
 
-`config/follower.toml`（从臂侧）和 `config/leader.toml`（主臂侧）各填一份。**两个臂的串口号不同**：
+`config/follower.toml`（从臂侧）和 `config/leader.toml`（主臂侧）各填一份。**两个臂的串口号/Serial 不同**：
 
 ```toml
 # config/follower.toml
@@ -130,44 +175,44 @@ baud = 1_000_000
 ids = [1, 2, 3, 4, 5, 6]
 vid = "0x1A86"
 pid = "0x55D3"
-serial = "5A7A055502"    # 从 arm 的 USB Serial
+serial = "5A7A055502"    # 从臂 USB Serial
 ```
-
-`config/leader.toml` 同样内容，`serial` 填主臂的值。
 
 ---
 
 ## 4. 编译项目
 
 ```bash
-# 全项目编译（首次约 10-20 分钟）
 cargo build --release
 cargo build -p tr-capture --release
-
-# 关键二进制：
-#   target/release/tr-capture   — DORA capture 节点
-#   target/debug/follower       — 从臂 daemon
-#   target/debug/leader         — 主臂 daemon + Web 控制台
 ```
+
+首次编译约 10-20 分钟。
 
 ---
 
 ## 5. 启动系统
 
-> 两个终端需同时运行。
-
 ### 5.1 从臂（终端 1）
 
 ```bash
+# macOS / Linux
 cargo run -p tr-daemon --bin follower -- --port /dev/cu.usbmodem5A7A0555021
+
+# Windows
+# cargo run -p tr-daemon --bin follower -- --port COM3
 ```
 
-输出 `state=IDLE` → 就绪，等待主臂指令。
+输出 `state=IDLE` → 就绪。
 
 ### 5.2 主臂 + Web 控制台（终端 2）
 
 ```bash
+# macOS / Linux
 cargo run -p tr-daemon --bin leader -- --port /dev/cu.usbmodem5AB01836201
+
+# Windows
+# cargo run -p tr-daemon --bin leader -- --port COM4
 ```
 
 浏览器打开 `http://localhost:8080`。
@@ -193,7 +238,7 @@ cargo run -p tr-daemon --bin leader -- --port /dev/cu.usbmodem5AB01836201
 
 > **防误操作**：未使能时录制按钮全部灰显；未开始采集时保存/重录不可用。
 
-### 键盘（备选，终端 2 中操作）
+### 键盘（备选）
 
 ```
 o → 使能     x → 失能
@@ -210,9 +255,7 @@ source training/.venv/bin/activate
 python -c "
 from lerobot.datasets import LeRobotDataset
 ds = LeRobotDataset('local/teleop', root='datasets/<日期>/<时间>')
-for ep in ds.meta.episodes:
-    print(f'Episode {ep[\"episode_index\"]}: {ep[\"length\"]} frames')
-print(f'Total: {ds.num_frames} frames, {len(ds.meta.episodes)} episodes')
+print(f'Episodes: {len(ds.meta.episodes)}, Frames: {ds.num_frames}')
 "
 ```
 
@@ -221,45 +264,43 @@ print(f'Total: {ds.num_frames} frames, {len(ds.meta.episodes)} episodes')
 ## 8. 目录结构（运行时生成，gitignored）
 
 ```
-datasets/                       ← 项目根目录
+datasets/
   2026-07-02/
     14-30-00/                   ← 每次使能独立目录
       data/chunk-000/           ← 关节数据 (parquet)
       meta/info.json            ← 数据集元信息
       videos/                   ← 摄像头视频 (mp4)
-        observation.images.front/
-        observation.images.wrist/
-    15-45-30/                   ← 第二次使能
 ```
 
 ---
 
 ## 9. 故障排查
 
-| 症状 | 原因 | 解决 |
-|---|---|---|
-| `command not found: cargo` | Rust 未安装 | 执行步骤 0.2 |
-| `command not found: uv` | uv 未安装 | 执行步骤 0.3 |
-| `command not found: dora` | DORA CLI 未安装 | 执行步骤 0.5 |
-| `maturin: command not found` | maturin 未安装 | 执行步骤 0.6，或 `cargo install maturin` |
-| `dora-node-api v1.0.0-rc1` 编译失败 | dora 源码未克隆 | 执行步骤 1 |
-| `no matching USB device` | VID/PID/Serial 配置错误 | 重跑 `cargo run -p tr-so101 --example usb_scan` |
-| `FileExistsError: datasets` | 旧数据残留 | `rm -rf datasets/` |
-| DORA `version mismatch` | 源码版本与 CLI 不一致 | `cd dora && git checkout v1.0.0-rc1` |
-| `ModuleNotFoundError: No module named 'dora'` | Python 未装 dora 包 | 重做步骤 2 的 maturin 部分 |
-| `ModuleNotFoundError: No module named 'cv2'` | opencv 未装 | `uv pip install opencv-python` |
-| Web 页面不更新状态 | 从臂未启动 | 先启动终端 1，再启动终端 2 |
-| 摄像头索引交换 | USB 枚举顺序不稳定 | 交换 `record.yml` 中 `TR_CAMERA_ID` 的 0/1 |
+| 症状 | 解决 |
+|---|---|
+| `command not found: cargo` | 执行 §0.2 |
+| `command not found: uv` | 执行 §0.4 |
+| `command not found: dora` | 执行 §0.5 |
+| `command not found: maturin` | 执行 §0.6 |
+| `dora-node-api v1.0.0-rc1` 编译失败 | dora 源码未克隆 → §1 |
+| `no matching USB device` | 重跑 `usb_scan`，更新 config |
+| `FileExistsError: datasets` | `rm -rf datasets/` |
+| DORA `version mismatch` | `cd dora && git checkout v1.0.0-rc1` |
+| `ModuleNotFoundError: dora` | 重做 §2 maturin 部分 |
+| `ModuleNotFoundError: cv2` / `numpy` | `uv pip install opencv-python numpy` |
+| Web 页面不更新 | 先启动终端 1 再启动终端 2 |
+| 摄像头索引交换 | 交换 `record.yml` 中 `TR_CAMERA_ID` 的 0/1 |
+| Linux 编译 `usb-resolver` 失败 | `sudo apt install libudev-dev` (§0.7) |
 
 ---
 
-## 10. gitignored 清单（需手动准备或运行时生成）
+## 10. gitignored 清单
 
-| 路径 | 说明 | 如何获取 |
+| 路径 | 说明 | 获取方式 |
 |---|---|---|
-| `dora/` | DORA 1.0-rc1 源码 | `git clone https://github.com/dora-rs/dora.git` |
-| `training/.venv/` | Python 虚拟环境 | `uv venv` 创建 |
+| `dora/` | DORA 源码 | `git clone` (§1) |
+| `training/.venv/` | Python venv | `uv venv` (§2) |
 | `datasets/` | 录制数据 | 运行时自动生成 |
-| `target/` | Rust 编译产物 | `cargo build` 自动生成 |
-| `.leon/` | lerobot 参考源码 | 不需要（只读参考） |
-| `logs/` | 运行日志 | 运行时生成 |
+| `target/` | Rust 编译产物 | `cargo build` |
+| `.leon/` | lerobot 参考源码 | 不需要 |
+| `logs/` | 日志 | 运行时生成 |
