@@ -80,7 +80,7 @@ fn main() -> anyhow::Result<()> {
 
     // ── Outer recovery loop ────────────────────────────────
     loop {
-        let (mut leader, rt_arm, mut t_ctrl, mut t_cmd) =
+        let (mut leader, _rt_arm, mut t_ctrl, mut t_cmd) =
             match connect_leader_arm(&port, &config, &id, &rt_zenoh) {
                 Ok(t) => { backoff.reset(); t }
                 Err(e) => {
