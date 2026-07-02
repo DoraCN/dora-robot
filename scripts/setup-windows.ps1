@@ -272,30 +272,39 @@ function Main {
 
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════╗"
-    Write-Host "  ║   DoraRobot 一键部署脚本 (Windows)           ║"
+    Write-Host "  ║   DoraRobot 一键部署脚本 (Windows)        ║"
     Write-Host "  ╚════════════════════════════════════════════╝"
     Write-Host ""
 
-    Check-Deps
+    # ── 第一步：全部交互式问题 ──
+    $role = Read-Host "  部署角色 [1]主臂 [2]从臂 [3]全部 (1/2/3)"
+    if ($role -notin @("1","2","3")) { Write-Err "无效选择" }
+
     Scan-USBDevices
     Select-Arms
     Generate-Configs
 
-    $doBuild = Read-Host "  现在编译项目? [Y/n]"
-    if ($doBuild -ne "n" -and $doBuild -ne "N") {
-        Build-Project
-    }
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════╗"
+    Write-Host "  ║   配置已确认，即将开始全自动安装          ║"
+    Write-Host "  ║   预计耗时 10-30 分钟（取决于网络）       ║"
+    Write-Host "  ╚════════════════════════════════════════════╝"
+    Write-Host ""
+    $start = Read-Host "  开始自动化安装? [Y/n]"
+    if ($start -eq "n" -or $start -eq "N") { Write-Log "已取消"; return }
 
+    # ── 第二步：全自动安装 ──
+    Check-Deps
+    Build-Project
     Register-Services
     Start-Services
 
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════╗"
-    Write-Host "  ║   部署完成！                                 ║"
+    Write-Host "  ║   部署完成！                              ║"
     Write-Host "  ╠════════════════════════════════════════════╣"
-    Write-Host "  ║  Web 控制台: http://localhost:8080          ║"
-    Write-Host "  ║  查看日志:   type logs\follower.log         ║"
-    Write-Host "  ║  停止服务:   Stop-ScheduledTask ...         ║"
+    Write-Host "  ║  Web 控制台: http://localhost:8080         ║"
+    Write-Host "  ║  查看日志:   type logs\follower.log        ║"
     Write-Host "  ╚════════════════════════════════════════════╝"
 }
 
