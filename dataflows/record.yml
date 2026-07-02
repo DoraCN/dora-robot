@@ -1,6 +1,6 @@
 nodes:
   - id: capture
-    path: ../target/release/tr-capture
+    path: ../bin/tr-capture
     outputs:
       - action
       - observation_state

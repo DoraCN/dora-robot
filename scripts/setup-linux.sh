@@ -193,7 +193,14 @@ build_project() {
     cd "$PROJECT"
     cargo build --release || err "编译失败"
     cargo build -p tr-capture --release || err "tr-capture 编译失败"
-    log "编译完成"
+
+    # 部署到 bin/
+    log "部署二进制到 bin/..."
+    mkdir -p "$PROJECT/bin"
+    cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
+    cp "$PROJECT/target/release/leader"   "$PROJECT/bin/leader"
+    cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
+    log "编译完成 → $PROJECT/bin/"
 }
 
 # ──────────────────────────────────────────────
@@ -216,7 +223,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$PROJECT
-ExecStart=$PROJECT/target/release/follower --config $PROJECT/config/follower.toml
+ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
 RestartSec=5
 Environment="PATH=${venv}/bin:/usr/bin:/bin"
@@ -237,7 +244,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$PROJECT
-ExecStart=$PROJECT/target/release/leader --config $PROJECT/config/leader.toml
+ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
 RestartSec=5
 Environment="PATH=${venv}/bin:/usr/bin:/bin"

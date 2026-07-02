@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+/bin/
 
 # Third-party reference source (downloaded lerobot — NOT part of this project)
 /.leon/

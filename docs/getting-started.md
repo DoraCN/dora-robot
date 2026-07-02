@@ -173,6 +173,12 @@ serial = "5A7A055502"    # 从臂 USB Serial
 ```bash
 cargo build --release
 cargo build -p tr-capture --release
+
+# 部署到 bin/
+mkdir -p bin
+cp target/release/follower   bin/follower
+cp target/release/leader     bin/leader
+cp target/release/tr-capture bin/tr-capture
 ```
 
 首次编译约 10-20 分钟。

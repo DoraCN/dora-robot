@@ -4,19 +4,24 @@
 
 ---
 
-## 1. 构建 Release 二进制
+## 1. 构建 + 部署到 bin/
 
 ```bash
 cargo build --release
 cargo build -p tr-capture --release
+
+mkdir -p bin
+cp target/release/follower   bin/follower
+cp target/release/leader     bin/leader
+cp target/release/tr-capture bin/tr-capture
 ```
 
 二进制位置：
 
 ```
-target/release/follower
-target/release/leader
-target/release/tr-capture
+bin/follower
+bin/leader
+bin/tr-capture
 ```
 
 > 下面所有服务配置中的 `$PROJECT` 替换为项目实际路径，例如 `/home/echo/dora-robot`。
@@ -40,7 +45,7 @@ target/release/tr-capture
 
     <key>ProgramArguments</key>
     <array>
-        <string>$PROJECT/target/release/follower</string>
+        <string>$PROJECT/bin/follower</string>
         <string>--config</string>
         <string>$PROJECT/config/follower.toml</string>
     </array>
@@ -83,7 +88,7 @@ target/release/tr-capture
 
     <key>ProgramArguments</key>
     <array>
-        <string>$PROJECT/target/release/leader</string>
+        <string>$PROJECT/bin/leader</string>
         <string>--config</string>
         <string>$PROJECT/config/leader.toml</string>
     </array>
@@ -163,7 +168,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$PROJECT
-ExecStart=$PROJECT/target/release/follower --config $PROJECT/config/follower.toml
+ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
 RestartSec=5
 Environment="PATH=$PROJECT/training/.venv/bin:/usr/bin:/bin"
@@ -187,7 +192,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$PROJECT
-ExecStart=$PROJECT/target/release/leader --config $PROJECT/config/leader.toml
+ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
 RestartSec=5
 Environment="PATH=$PROJECT/training/.venv/bin:/usr/bin:/bin"
