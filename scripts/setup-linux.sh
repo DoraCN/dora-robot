@@ -74,14 +74,16 @@ check_deps() {
 
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
-    # DORA CLI — 从臂需要，主臂不需要
+    # DORA 源码 — 编译 workspace 需要的依赖，任意模式下都必须存在
+    if [ ! -d "$PROJECT/dora" ]; then
+        warn "dora 源码不存在，正在自动克隆（workspace 依赖需要）..."
+        sudo -u "$REAL_USER" env $PROXY_ENV \
+            git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
+    fi
+
+    # DORA CLI — 只有从臂需要编译安装
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译安装..."
-        if [ ! -d "$PROJECT/dora" ]; then
-            warn "dora 源码不存在，正在自动克隆..."
-            sudo -u "$REAL_USER" env $PROXY_ENV \
-                git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
-        fi
         cd "$PROJECT"
         sudo -u "$REAL_USER" env $PROXY_ENV \
             "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
@@ -298,12 +300,9 @@ build_project() {
     local CARGO="$REAL_HOME/.cargo/bin/cargo"
 
     cd "$PROJECT"
+    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
     if [ "$NEED_DORA" = true ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
         sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
-    else
-        # 主臂模式：不编译 tr-capture，避免 cargo 解析 dora 依赖
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release --manifest-path "$PROJECT/crates/tr-daemon/Cargo.toml" || err "编译失败"
     fi
 
     log "部署二进制到 bin/..."
