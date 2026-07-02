@@ -20,14 +20,25 @@ function Write-Err   { Write-Host "[error] $args" -ForegroundColor Red; exit 1 }
 
 function Check-Deps {
     Write-Log "检查前置依赖..."
+
+    # Rust — 自动安装
     if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-        Write-Err "Rust 未安装。https://rustup.rs"
-    }
-    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-        Write-Err "uv 未安装。irm https://astral.sh/uv/install.ps1 | iex"
+        Write-Warn "Rust 未安装，正在自动安装..."
+        Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "$env:TEMP\rustup-init.exe"
+        & "$env:TEMP\rustup-init.exe" -y
+        $env:Path = "$env:USERPROFILE\.cargo\bin;" + $env:Path
+        Write-Log "Rust 已安装"
     }
 
-    # DORA CLI — 如果未安装，从本地源码编译安装
+    # uv — 自动安装
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Warn "uv 未安装，正在自动安装..."
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        $env:Path = "$env:USERPROFILE\.local\bin;" + $env:Path
+        Write-Log "uv 已安装"
+    }
+
+    # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
     if (-not (Get-Command dora -ErrorAction SilentlyContinue)) {
         Write-Warn "dora CLI 未安装，从本地 dora\ 源码编译安装..."
         if (-not (Test-Path "$PROJECT\dora")) {

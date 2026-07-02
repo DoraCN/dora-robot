@@ -29,8 +29,22 @@ info() { echo -e "${CYAN}        $*${NC}"; }
 
 check_deps() {
     log "检查前置依赖..."
-    command -v cargo  >/dev/null || err "Rust 未安装。curl https://sh.rustup.rs -sSf | sh"
-    command -v uv     >/dev/null || err "uv 未安装。curl -LsSf https://astral.sh/uv/install.sh | sh"
+    # Rust — 自动安装
+    if ! command -v cargo >/dev/null; then
+        warn "Rust 未安装，正在自动安装..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+        log "Rust 已安装"
+    fi
+
+    # uv — 自动安装
+    if ! command -v uv >/dev/null; then
+        warn "uv 未安装，正在自动安装..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        log "uv 已安装"
+    fi
+
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
     # DORA CLI — 如果未安装，从本地源码编译安装
