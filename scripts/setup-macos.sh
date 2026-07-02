@@ -306,8 +306,7 @@ build_project() {
         sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
         sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
     else
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-daemon --release --bin follower || err "编译失败"
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-daemon --release --bin leader || err "编译失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release --manifest-path "$PROJECT/crates/tr-daemon/Cargo.toml" || err "编译失败"
     fi
 
     log "部署二进制到 bin/..."
