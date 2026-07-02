@@ -418,13 +418,15 @@ build_project() {
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
 
-    # 停止运行中的服务，避免 cp 被占用（Text file busy）
-    if [ "$NEED_FOLLOWER" = true ]; then
-        systemctl stop dorarobot-follower 2>/dev/null || true
-    fi
-    if [ "$NEED_LEADER" = true ]; then
-        systemctl stop dorarobot-leader 2>/dev/null || true
-    fi
+    # 停止运行中的服务，避免 cp 被占用（Text file busy）。
+    # 兼容旧的 root system 服务 + 新的 user 服务；start_services 会重新拉起。
+    local UID_N
+    UID_N=$(id -u "$REAL_USER")
+    local UCTL="sudo -u $REAL_USER XDG_RUNTIME_DIR=/run/user/$UID_N systemctl --user"
+    for svc in dorarobot-follower dorarobot-leader; do
+        systemctl stop "$svc" 2>/dev/null || true
+        $UCTL stop "$svc" 2>/dev/null || true
+    done
 
     if [ "$NEED_FOLLOWER" = true ]; then
         cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
@@ -435,14 +437,6 @@ build_project() {
     if [ "$NEED_DORA" = true ]; then
         cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
     fi
-
-    # 重启服务
-    if [ "$NEED_FOLLOWER" = true ]; then
-        systemctl start dorarobot-follower 2>/dev/null || true
-    fi
-    if [ "$NEED_LEADER" = true ]; then
-        systemctl start dorarobot-leader 2>/dev/null || true
-    fi
     log "编译完成 → $PROJECT/bin/"
 }
 
@@ -451,7 +445,7 @@ build_project() {
 # ──────────────────────────────────────────────
 
 register_services() {
-    log "注册 systemd 服务..."
+    log "注册 systemd user 服务..."
 
     local REAL_USER="${SUDO_USER:-$USER}"
     local REAL_HOME
@@ -460,62 +454,89 @@ register_services() {
     else
         REAL_HOME="$HOME"
     fi
+    local UID_N
+    UID_N=$(id -u "$REAL_USER")
 
+    # user service 必须开启 linger，才能开机自启 + 无需登录常驻。
+    # 且 user service 天然继承用户全部组 + logind uaccess 设备 ACL，
+    # 因此摄像头(video)/USB(dialout)/录制文件权限均与手动运行一致。
+    loginctl enable-linger "$REAL_USER" || warn "enable-linger 失败"
+
+    # 等待用户 systemd 实例就绪（/run/user/<uid> 出现）
+    for _ in $(seq 1 10); do
+        [ -d "/run/user/$UID_N" ] && break
+        sleep 1
+    done
+
+    local UNIT_DIR="$REAL_HOME/.config/systemd/user"
+    sudo -u "$REAL_USER" mkdir -p "$UNIT_DIR"
+
+    # 清理旧的 root system 服务（历史遗留）
+    for svc in dorarobot-follower dorarobot-leader; do
+        if [ -f "/etc/systemd/system/${svc}.service" ]; then
+            systemctl stop "$svc" 2>/dev/null || true
+            systemctl disable "$svc" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${svc}.service"
+        fi
+    done
+    systemctl daemon-reload 2>/dev/null || true
+
+    # 清理可能是 root 属主的旧日志（避免 user service 无法写入）
     mkdir -p "$PROJECT/logs"
+    chown -R "$REAL_USER" "$PROJECT/logs" 2>/dev/null || true
+
     local venv="$PROJECT/training/.venv"
 
     if [ "$NEED_FOLLOWER" = true ]; then
-        cat > /etc/systemd/system/dorarobot-follower.service << EOF
+        sudo -u "$REAL_USER" tee "$UNIT_DIR/dorarobot-follower.service" > /dev/null << EOF
 [Unit]
-Description=DoraRobot Follower Daemon
-After=network.target
+Description=DoraRobot Follower Daemon (user service)
+After=default.target
 
 [Service]
 Type=simple
-User=$REAL_USER
-SupplementaryGroups=video dialout
 WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
 RestartSec=5
 Environment="PATH=${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=${venv}"
-StandardOutput=append:$PROJECT/logs/follower.log
-StandardError=append:$PROJECT/logs/follower.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
-        systemctl enable dorarobot-follower
     fi
 
     if [ "$NEED_LEADER" = true ]; then
-        cat > /etc/systemd/system/dorarobot-leader.service << EOF
+        sudo -u "$REAL_USER" tee "$UNIT_DIR/dorarobot-leader.service" > /dev/null << EOF
 [Unit]
-Description=DoraRobot Leader Daemon + Web Console
-After=network.target
+Description=DoraRobot Leader Daemon + Web Console (user service)
+After=default.target
 
 [Service]
 Type=simple
-User=$REAL_USER
-SupplementaryGroups=video dialout
 WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
 RestartSec=5
 Environment="PATH=${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=${venv}"
-StandardOutput=append:$PROJECT/logs/leader.log
-StandardError=append:$PROJECT/logs/leader.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
-        systemctl enable dorarobot-leader
     fi
 
-    systemctl daemon-reload
-    log "systemd 服务已注册并设为开机自启"
+    # 以目标用户身份操作其 user systemd 实例
+    local UCTL="sudo -u $REAL_USER XDG_RUNTIME_DIR=/run/user/$UID_N systemctl --user"
+    $UCTL daemon-reload
+    if [ "$NEED_FOLLOWER" = true ]; then
+        $UCTL enable dorarobot-follower
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+        $UCTL enable dorarobot-leader
+    fi
+    log "systemd user 服务已注册并设为开机自启（linger 已开启）"
 }
 
 # ──────────────────────────────────────────────
@@ -525,29 +546,34 @@ EOF
 start_services() {
     log "启动服务..."
 
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local UID_N
+    UID_N=$(id -u "$REAL_USER")
+    local UCTL="sudo -u $REAL_USER XDG_RUNTIME_DIR=/run/user/$UID_N systemctl --user"
+
     if [ "$NEED_FOLLOWER" = true ]; then
-        systemctl start dorarobot-follower
+        $UCTL start dorarobot-follower
     fi
     if [ "$NEED_LEADER" = true ]; then
-        systemctl start dorarobot-leader
+        $UCTL start dorarobot-leader
     fi
 
     sleep 3
     echo ""
 
     if [ "$NEED_FOLLOWER" = true ]; then
-        if systemctl is-active --quiet dorarobot-follower; then
+        if $UCTL is-active --quiet dorarobot-follower; then
             log "从臂服务: ${GREEN}运行中${NC}"
         else
-            warn "从臂服务: 启动失败，查看日志: journalctl -u dorarobot-follower -n 20"
+            warn "从臂服务: 启动失败，查看日志: journalctl --user -u dorarobot-follower -n 20"
         fi
     fi
 
     if [ "$NEED_LEADER" = true ]; then
-        if systemctl is-active --quiet dorarobot-leader; then
+        if $UCTL is-active --quiet dorarobot-leader; then
             log "主臂服务: ${GREEN}运行中${NC}"
         else
-            warn "主臂服务: 启动失败，查看日志: journalctl -u dorarobot-leader -n 20"
+            warn "主臂服务: 启动失败，查看日志: journalctl --user -u dorarobot-leader -n 20"
         fi
     fi
 }
@@ -634,13 +660,14 @@ main() {
     echo "  ║  Web 控制台: http://<本机IP>:8080        ║"
     fi
     if [ "$NEED_FOLLOWER" = true ]; then
-    echo "  ║  查看从臂日志: sudo journalctl -u dorarobot-follower -f   ║"
-    echo "  ║  停止从臂服务: sudo systemctl stop dorarobot-follower     ║"
+    echo "  ║  查看从臂日志: journalctl --user -u dorarobot-follower -f  ║"
+    echo "  ║  停止从臂服务: systemctl --user stop dorarobot-follower    ║"
     fi
     if [ "$NEED_LEADER" = true ]; then
-    echo "  ║  查看主臂日志: sudo journalctl -u dorarobot-leader -f    ║"
-    echo "  ║  停止主臂服务: sudo systemctl stop dorarobot-leader      ║"
+    echo "  ║  查看主臂日志: journalctl --user -u dorarobot-leader -f   ║"
+    echo "  ║  停止主臂服务: systemctl --user stop dorarobot-leader     ║"
     fi
+    echo "  ║  (user 服务命令无需 sudo)                 ║"
     echo "  ╚══════════════════════════════════════════╝"
 }
 
