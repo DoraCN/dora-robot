@@ -40,8 +40,11 @@ impl DoraFlow {
     pub fn launch(config: &DaemonConfig) -> anyhow::Result<Self> {
         let id = &config.arm.id;
 
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let root = format!("../datasets/{}", today);
+        let now = chrono::Local::now();
+        let root = format!(
+            "../datasets/{}",
+            now.format("%Y-%m-%d/%H-%M-%S")
+        );
         let task = "teleop";
 
         // dora up (ignore errors if already running)
