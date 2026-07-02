@@ -298,9 +298,13 @@ build_project() {
     local CARGO="$REAL_HOME/.cargo/bin/cargo"
 
     cd "$PROJECT"
-    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
     if [ "$NEED_DORA" = true ]; then
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
         sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+    else
+        # 主臂模式：不编译 tr-capture，避免 cargo 解析 dora 依赖
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-daemon --release --bin follower || err "编译失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-daemon --release --bin leader || err "编译失败"
     fi
 
     log "部署二进制到 bin/..."
@@ -422,7 +426,7 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   DoraRobot 一键部署脚本 (Linux)        ║"
+    echo "  ║   DoraRobot 一键部署脚本 (Linux)          ║"
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
