@@ -464,7 +464,7 @@ main() {
     while true; do
         read -rp "  选择 [1-3]: " ROLE
         case "$ROLE" in
-            1) NEED_DORA=false; NEED_LEADER=true;  NEED_FOLLOWER=true;  break ;;
+            1) NEED_DORA=false; NEED_LEADER=true;  NEED_FOLLOWER=false; break ;;
             2) NEED_DORA=true;  NEED_LEADER=false; NEED_FOLLOWER=true;  break ;;
             3) NEED_DORA=true;  NEED_LEADER=true;  NEED_FOLLOWER=true;  break ;;
             *) warn "无效选择，请输入 1/2/3" ;;
