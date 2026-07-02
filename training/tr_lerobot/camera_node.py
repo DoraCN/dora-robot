@@ -1,14 +1,16 @@
 """DORA camera node — captures frames from a USB camera and outputs Arrow arrays.
 
+This node has no DORA inputs — it captures frames on its own clock and
+pushes them as outputs. The DORA event loop is used only to detect STOP.
+
 Usage in dataflow YAML:
   nodes:
     - id: camera_front
-      path: python
-      args: -m tr_lerobot.camera_node
+      path: ../training/tr_lerobot/camera_node.py
       outputs:
         - image
       env:
-        TR_CAMERA_ID: "0x2122000046d082d"   # macOS Unique ID
+        TR_CAMERA_ID: "0"
         TR_CAMERA_WIDTH: "640"
         TR_CAMERA_HEIGHT: "480"
         TR_CAMERA_FPS: "30"
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import os
 import time
+from threading import Lock
 
 import cv2
 import numpy as np
@@ -25,6 +28,59 @@ import numpy as np
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default).strip()
+
+
+class FrameGrabber:
+    """Background camera reader — continuously captures the latest frame."""
+
+    def __init__(self, camera_id: str, width: int, height: int):
+        if camera_id.isdigit():
+            self._cap = cv2.VideoCapture(int(camera_id))
+        else:
+            self._cap = cv2.VideoCapture(camera_id)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"cannot open camera: {camera_id}")
+        self._actual_w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._actual_h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self._lock = Lock()
+        self._latest: np.ndarray | None = None
+        self._running = True
+
+    @property
+    def width(self) -> int:
+        return self._actual_w
+
+    @property
+    def height(self) -> int:
+        return self._actual_h
+
+    def start(self):
+        """Spawn a background thread that continuously grabs frames."""
+        import threading
+        t = threading.Thread(target=self._run, daemon=True)
+        t.start()
+        return t
+
+    def _run(self):
+        import time
+        while self._running:
+            ret, frame = self._cap.read()
+            if ret:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                with self._lock:
+                    self._latest = rgb
+            else:
+                time.sleep(0.001)
+
+    def latest_rgb(self) -> np.ndarray | None:
+        with self._lock:
+            return self._latest.copy() if self._latest is not None else None
+
+    def stop(self):
+        self._running = False
+        self._cap.release()
 
 
 def main() -> None:
@@ -35,65 +91,41 @@ def main() -> None:
     height = int(_env("TR_CAMERA_HEIGHT", "480"))
     target_fps = float(_env("TR_CAMERA_FPS", "30"))
 
-    # Attempt by index first (most reliable on macOS)
-    # Unique ID support: parse "id:<value>" to look up by USB resolver output
-    if camera_id.startswith("id:"):
-        camera_id = camera_id[3:]
-
-    try:
-        idx = int(camera_id)
-        cap = cv2.VideoCapture(idx)
-    except ValueError:
-        cap = cv2.VideoCapture(camera_id)
-        if not cap.isOpened():
-            # fallback to index 0
-            cap = cv2.VideoCapture(0)
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap.set(cv2.CAP_PROP_FPS, target_fps)
-
-    if not cap.isOpened():
-        raise RuntimeError(f"cannot open camera: {camera_id}")
-
-    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"[camera] {camera_id} {actual_w}x{actual_h} @ {target_fps}fps")
+    grabber = FrameGrabber(camera_id, width, height)
+    grabber.start()
+    print(f"[camera] {camera_id} {grabber.width}x{grabber.height} @ {target_fps}fps")
 
     node = Node()
     interval = 1.0 / target_fps
-    last = time.monotonic()
+    last_send = time.monotonic()
 
+    # Process DORA events (only STOP matters) and send frames on our clock.
     for event in node:
         if event["type"] == "STOP":
             break
 
         now = time.monotonic()
-        if now - last < interval:
+        if now - last_send < interval:
             continue
-        last = now
+        last_send = now
 
-        ret, frame_bgr = cap.read()
-        if not ret:
+        frame = grabber.latest_rgb()
+        if frame is None:
             continue
 
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-
-        # flat HWC uint8
-        data = frame_rgb.flatten().astype(np.uint8)
-
+        data = frame.flatten().astype(np.uint8)
         node.send_output(
             "image",
             data,
             {
-                "width": str(actual_w),
-                "height": str(actual_h),
+                "width": str(grabber.width),
+                "height": str(grabber.height),
                 "encoding": "rgb8",
                 "channels": "3",
             },
         )
 
-    cap.release()
+    grabber.stop()
 
 
 if __name__ == "__main__":
