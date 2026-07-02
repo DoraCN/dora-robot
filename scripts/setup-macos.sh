@@ -18,7 +18,7 @@ info() { echo -e "${CYAN}        $*${NC}"; }
 PROXY_ENV=""
 for v in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY; do
     eval "val=\${$v:-}"
-    [ -n "$val" ] && PROXY_ENV="$PROXY_ENV $v='$val'"
+    [ -n "$val" ] && PROXY_ENV="$PROXY_ENV $v=$val"
 done
 
 # 同时保留到当前 shell
