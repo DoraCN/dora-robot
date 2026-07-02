@@ -5,7 +5,7 @@
 #   chmod +x scripts/setup-macos.sh
 #   sudo ./scripts/setup-macos.sh
 
-set -euo pipefail
+set -eo pipefail
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -16,8 +16,8 @@ info() { echo -e "${CYAN}        $*${NC}"; }
 
 # sudo 默认清除代理环境变量，手动保留
 for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY; do
-    val=$(eval echo "\${$var}" 2>/dev/null || true)
-    [ -n "$val" ] && export "$var"="$val"
+    val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
+    [ -n "$val" ] && export "${var}=${val}" || true
 done
 
 # ──────────────────────────────────────────────
