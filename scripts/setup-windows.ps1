@@ -49,15 +49,6 @@ function Check-Deps {
             if ($LASTEXITCODE -ne 0) { Write-Err "克隆 dora 仓库失败" }
         }
         Push-Location "$PROJECT\dora"
-        try {
-            $tag = git describe --tags --exact-match 2>$null
-            if ($tag -ne "v1.0.0-rc.1") {
-                Write-Warn "切换到 v1.0.0-rc.1..."
-                git checkout v1.0.0-rc.1 2>$null
-            }
-        } catch {
-            Write-Warn "git checkout 失败，继续编译（可能版本不匹配）"
-        }
         Pop-Location
         cargo build -p dora-cli --release --manifest-path "$PROJECT\dora\Cargo.toml"
         if ($LASTEXITCODE -ne 0) { Write-Err "dora 编译失败" }

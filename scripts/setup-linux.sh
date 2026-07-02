@@ -82,11 +82,6 @@ check_deps() {
             sudo -u "$REAL_USER" env $PROXY_ENV \
                 git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
         fi
-        cd "$PROJECT/dora"
-        git fetch --tags 2>/dev/null || true
-        if ! git checkout v1.0.0-rc.1 2>/dev/null; then
-            warn "tag v1.0.0-rc.1 不存在，使用默认分支..."
-        fi
         cd "$PROJECT"
         sudo -u "$REAL_USER" env $PROXY_ENV \
             "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
@@ -371,7 +366,7 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   DoraRobot 一键部署脚本 (Linux)           ║"
+    echo "  ║   DoraRobot 一键部署脚本 (Linux)        ║"
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
