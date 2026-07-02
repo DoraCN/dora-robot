@@ -137,8 +137,12 @@ fn main() -> eyre::Result<()> {
         }
 
         match events.recv_timeout(Duration::from_millis(10)) {
-            Some(_) => break, // Stop or other termination event
-            None => {}         // timeout — continue
+            Some(event) => {
+                if matches!(event, dora_node_api::Event::Stop) || matches!(event, dora_node_api::Event::AllInputsClosed) {
+                    break;
+                }
+            }
+            None => {}
         }
     }
 
