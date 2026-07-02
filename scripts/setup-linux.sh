@@ -332,7 +332,7 @@ install_venv() {
         MATURIN="maturin"
     fi
 
-    sudo -u "$REAL_USER" env $PROXY_ENV "$MATURIN" build \
+    sudo -u "$REAL_USER" env $PROXY_ENV PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
         -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
 
     local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)

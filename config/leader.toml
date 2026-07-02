@@ -9,7 +9,7 @@ baud = 1_000_000
 ids = [1, 2, 3, 4, 5, 6]
 vid = "0x1A86"
 pid = "0x55D3"
-serial = "5AB01836201"
+serial = "5AB0183620"
 
 [zenoh]
 mode = "peer"
