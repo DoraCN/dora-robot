@@ -284,6 +284,47 @@ EOF
 }
 
 # ──────────────────────────────────────────────
+# 5a. Python 虚拟环境 + 依赖安装（仅从臂）
+# ──────────────────────────────────────────────
+
+install_venv() {
+    log "安装 Python 虚拟环境..."
+
+    local VENV="$PROJECT/training/.venv"
+    local VENV_PYTHON="$VENV/bin/python"
+
+    if [ ! -d "$VENV" ]; then
+        sudo -u "$REAL_USER" env $PROXY_ENV uv venv "$VENV" --python 3.12 || err "创建 venv 失败"
+    fi
+
+    log "安装 Python 依赖 (numpy, opencv, pyarrow)..."
+    sudo -u "$REAL_USER" env $PROXY_ENV uv pip install --python "$VENV_PYTHON" \
+        numpy opencv-python pyarrow pyyaml || err "pip install 失败"
+
+    log "安装 lerobot (含 torch, ~2GB)..."
+    sudo -u "$REAL_USER" env $PROXY_ENV uv pip install --python "$VENV_PYTHON" \
+        lerobot || err "lerobot 安装失败"
+
+    log "构建 DORA Python 包..."
+    if ! command -v maturin >/dev/null; then
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO_BIN" install maturin || warn "maturin 编译失败"
+        MATURIN="$REAL_HOME/.cargo/bin/maturin"
+    else
+        MATURIN="maturin"
+    fi
+
+    sudo -u "$REAL_USER" env $PROXY_ENV "$MATURIN" build \
+        -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
+
+    local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
+    if [ -n "$wheel" ]; then
+        sudo -u "$REAL_USER" env $PROXY_ENV uv pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
+        log "DORA Python 包已安装"
+    fi
+    log "Python 环境安装完成"
+}
+
+# ──────────────────────────────────────────────
 # 5. 编译项目
 # ──────────────────────────────────────────────
 
@@ -476,6 +517,9 @@ main() {
     # ── 第二步：全自动安装（无需人工干预）──────
     check_deps
     generate_configs
+    if [ "$NEED_DORA" = true ]; then
+        install_venv
+    fi
     build_project
     register_services
     start_services

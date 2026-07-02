@@ -5,5 +5,6 @@
 
 pub mod config;
 pub mod dora;
+pub mod retry;
 pub mod state;
 pub mod web;
