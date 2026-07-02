@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
     let web_state = Arc::new(WebState { status_tx, cmd_tx });
     let app = web::router(web_state.clone());
     let web_rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().build()?;
+        .worker_threads(1).enable_io().enable_time().build()?;
     web_rt.spawn(async {
         let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
         eprintln!("[leader] web console → http://localhost:8080");
