@@ -49,25 +49,25 @@ check_deps() {
 
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
-    # DORA CLI — 如果未安装，从本地源码编译安装
+    # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
     if ! command -v dora >/dev/null; then
-        warn "dora CLI 未安装，从本地 dora/ 源码编译安装..."
+        warn "dora CLI 未安装，从源码编译安装..."
         if [ ! -d "$PROJECT/dora" ]; then
-            err "dora 源码目录不存在。请先：git clone https://github.com/dora-rs/dora.git && cd dora && git checkout v1.0.0-rc1 && cd .."
+            warn "dora 源码不存在，正在自动克隆..."
+            git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
         fi
         cd "$PROJECT/dora"
         if ! git describe --tags --exact-match 2>/dev/null | grep -q "v1.0.0-rc1"; then
-            warn "dora 源码不在 v1.0.0-rc1 tag，正在切换..."
+            warn "切换到 v1.0.0-rc1..."
             git fetch --tags && git checkout v1.0.0-rc1 || warn "git checkout 失败，继续编译（可能版本不匹配）"
         fi
         cd "$PROJECT"
-        cd "$PROJECT/dora"
-        cargo build -p dora-cli --release || err "dora 编译失败"
-        mkdir -p ~/.local/bin
-        cp target/release/dora ~/.local/bin/dora
-        export PATH="$HOME/.local/bin:$PATH"
-        log "dora CLI 已安装到 ~/.local/bin/dora"
-        cd "$PROJECT"
+        sudo -u "$REAL_USER" cargo build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
+        mkdir -p "$REAL_HOME/.local/bin"
+        cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
+        chown "$REAL_USER" "$REAL_HOME/.local/bin/dora" 2>/dev/null || true
+        export PATH="$REAL_HOME/.local/bin:$PATH"
+        log "dora CLI 已安装到 $REAL_HOME/.local/bin/dora"
     fi
     log "依赖检查通过"
 }

@@ -39,16 +39,20 @@ function Check-Deps {
     }
 
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
+
+    # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
     if (-not (Get-Command dora -ErrorAction SilentlyContinue)) {
-        Write-Warn "dora CLI 未安装，从本地 dora\ 源码编译安装..."
+        Write-Warn "dora CLI 未安装，从源码编译安装..."
         if (-not (Test-Path "$PROJECT\dora")) {
-            Write-Err "dora 源码目录不存在。请先：git clone https://github.com/dora-rs/dora.git && cd dora && git checkout v1.0.0-rc1 && cd .."
+            Write-Warn "dora 源码不存在，正在自动克隆..."
+            git clone https://github.com/dora-rs/dora.git "$PROJECT\dora"
+            if ($LASTEXITCODE -ne 0) { Write-Err "克隆 dora 仓库失败" }
         }
         Push-Location "$PROJECT\dora"
         try {
             $tag = git describe --tags --exact-match 2>$null
             if ($tag -ne "v1.0.0-rc1") {
-                Write-Warn "dora 源码不在 v1.0.0-rc1，正在切换..."
+                Write-Warn "切换到 v1.0.0-rc1..."
                 git fetch --tags 2>$null
                 git checkout v1.0.0-rc1 2>$null
             }
@@ -56,14 +60,13 @@ function Check-Deps {
             Write-Warn "git checkout 失败，继续编译（可能版本不匹配）"
         }
         Pop-Location
-        cargo build -p dora-cli --release
+        cargo build -p dora-cli --release --manifest-path "$PROJECT\dora\Cargo.toml"
         if ($LASTEXITCODE -ne 0) { Write-Err "dora 编译失败" }
         $binDir = "$env:LOCALAPPDATA\dora"
         New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-        Copy-Item "target\release\dora.exe" "$binDir\dora.exe"
+        Copy-Item "$PROJECT\dora\target\release\dora.exe" "$binDir\dora.exe"
         $env:Path = "$binDir;$env:Path"
         [Environment]::SetEnvironmentVariable("Path", "$binDir;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
-        Pop-Location
         Write-Log "dora CLI 已安装到 $binDir\"
     }
     Write-Log "依赖检查通过"
