@@ -5,6 +5,7 @@
 
 use arrow::array::Float32Array;
 use dora_node_api::DoraNode;
+use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 use tr_codec::PostcardCodec;
@@ -111,18 +112,26 @@ fn main() -> eyre::Result<()> {
                     last_send = std::time::Instant::now();
                 }
                 Captured::EpisodeStart { task } => {
-                    let json = format!(r#"{{"cmd":"StartRecord","task":"{}"}}"#, task);
-                    node.send_output_bytes("episode_end".into(), Default::default(), json.len(), json.as_bytes())?;
+                    let mut meta = BTreeMap::new();
+                    meta.insert("cmd".into(), dora_node_api::Parameter::String("StartRecord".into()));
+                    meta.insert("task".into(), dora_node_api::Parameter::String(task));
+                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
                 Captured::EpisodeEnd(outcome) => {
-                    let json = format!(r#"{{"cmd":"EndRecord","outcome":"{}"}}"#, outcome);
-                    node.send_output_bytes("episode_end".into(), Default::default(), json.len(), json.as_bytes())?;
+                    let mut meta = BTreeMap::new();
+                    meta.insert("cmd".into(), dora_node_api::Parameter::String("EndRecord".into()));
+                    meta.insert("outcome".into(), dora_node_api::Parameter::String(outcome));
+                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
                 Captured::EpisodeReRecord => {
-                    node.send_output_bytes("episode_end".into(), Default::default(), 15, br#"{"cmd":"ReRecord"}"#)?;
+                    let mut meta = BTreeMap::new();
+                    meta.insert("cmd".into(), dora_node_api::Parameter::String("ReRecord".into()));
+                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
                 Captured::EpisodeStop => {
-                    node.send_output_bytes("episode_end".into(), Default::default(), 13, br#"{"cmd":"Stop"}"#)?;
+                    let mut meta = BTreeMap::new();
+                    meta.insert("cmd".into(), dora_node_api::Parameter::String("Stop".into()));
+                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
             }
         }

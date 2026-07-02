@@ -39,7 +39,7 @@ nodes:
     env:
       PYTHONPATH: "../training"
       LEROBOT_REPO_ID: "local/teleop"
-      LEROBOT_ROOT: "./datasets"
+      LEROBOT_ROOT: "../datasets"
       LEROBOT_FPS: "30"
       LEROBOT_TASK: "${TR_TASK:-teleop}"
       TR_CAMERAS: "front:480x640,wrist:480x640"
