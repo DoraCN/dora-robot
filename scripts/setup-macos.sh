@@ -345,12 +345,11 @@ install_venv() {
     log "构建 DORA Python 包..."
     if ! command -v maturin >/dev/null; then
         sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO_BIN" install maturin || warn "maturin 编译失败"
-        MATURIN="$REAL_HOME/.cargo/bin/maturin"
-    else
-        MATURIN="maturin"
     fi
+    MATURIN="$REAL_HOME/.cargo/bin/maturin"
 
-    sudo -u "$REAL_USER" env $PROXY_ENV_CMD PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
+    [ -x "$MATURIN" ] && sudo -u "$REAL_USER" env PATH="$REAL_HOME/.cargo/bin:$PATH" $PROXY_ENV_CMD \
+        PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
         -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
 
     local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
@@ -385,6 +384,15 @@ build_project() {
 
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
+
+    # 停止运行中的服务，避免 cp 被占用（Text file busy）
+    if [ "$NEED_FOLLOWER" = true ]; then
+        launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+        launchctl unload /Library/LaunchDaemons/com.dorarobot.leader.plist 2>/dev/null || true
+    fi
+
     if [ "$NEED_FOLLOWER" = true ]; then
         cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
     fi
@@ -393,6 +401,14 @@ build_project() {
     fi
     if [ "$NEED_DORA" = true ]; then
         cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
+    fi
+
+    # 重启服务
+    if [ "$NEED_FOLLOWER" = true ]; then
+        launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+        launchctl load /Library/LaunchDaemons/com.dorarobot.leader.plist 2>/dev/null || true
     fi
     log "编译完成 → $PROJECT/bin/"
 }
