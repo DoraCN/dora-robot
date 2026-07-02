@@ -73,11 +73,11 @@ check_deps() {
             git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
     fi
 
-    # DORA CLI — 只有从臂需要编译安装
+    # DORA CLI — 只有从臂需要编译安装（需要 PYO3_PYTHON 指向 Python ≥3.11）
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译安装..."
         cd "$PROJECT"
-        sudo -u "$REAL_USER" env $PROXY_ENV \
+        sudo -u "$REAL_USER" env $PROXY_ENV PYO3_PYTHON="${PYO3_PYTHON:-}" \
             "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
         mkdir -p "$REAL_HOME/.local/bin"
         cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
@@ -86,6 +86,24 @@ check_deps() {
         log "dora CLI 已安装到 $REAL_HOME/.local/bin/dora"
     fi
     log "依赖检查通过"
+}
+
+# ──────────────────────────────────────────────
+# 0. 预创建 Python 3.12 venv（DORA 编译需要 pyo3 ≥3.11）
+# ──────────────────────────────────────────────
+ensure_python312() {
+    local UV_BIN="$REAL_HOME/.local/bin/uv"
+    local VENV="$PROJECT/training/.venv"
+
+    if [ -d "$VENV" ]; then
+        log "Python venv 已存在，跳过创建"
+    else
+        log "预创建 Python 3.12 虚拟环境（供 DORA 编译使用）..."
+        sudo -u "$REAL_USER" env $PROXY_ENV \
+            "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
+        log "Python 3.12 venv 已创建 → $VENV"
+    fi
+    export PYO3_PYTHON="$VENV/bin/python"
 }
 
 # ──────────────────────────────────────────────
@@ -540,6 +558,9 @@ main() {
     fi
 
     # ── 第二步：全自动安装 ──
+    if [ "$NEED_DORA" = true ]; then
+        ensure_python312
+    fi
     check_deps
     generate_configs
     if [ "$NEED_DORA" = true ]; then
