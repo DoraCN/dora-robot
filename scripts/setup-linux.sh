@@ -74,8 +74,8 @@ check_deps() {
 
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
-    # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
-    if [ ! -x "$DORA_BIN" ]; then
+    # DORA CLI — 从臂需要，主臂不需要
+    if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译安装..."
         if [ ! -d "$PROJECT/dora" ]; then
             warn "dora 源码不存在，正在自动克隆..."
@@ -147,7 +147,44 @@ scan_usb_devices() {
 }
 
 # ──────────────────────────────────────────────
-# 3. 交互式选择主臂/从臂
+# 3a. 交互式选择单个臂
+# ──────────────────────────────────────────────
+
+select_single_arm() {
+    local label="$1"
+    echo ""
+    log "请选择 $label"
+
+    while true; do
+        read -rp "  序号 [1-${#DEVICES[@]}]: " idx
+        if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DEVICES[@]}" ]; then
+            break
+        fi
+        warn "无效序号，请重试"
+    done
+
+    IFS='|' read -r DEV VID PID SERIAL DESC <<< "${DEVICES[$((idx - 1))]}"
+    VID="${VID#0x}"; PID="${PID#0x}"
+
+    if [ "$NEED_LEADER" = true ]; then
+        LEADER_DEV="$DEV"; LEADER_VID="$VID"; LEADER_PID="$PID"; LEADER_SERIAL="$SERIAL"
+    fi
+    if [ "$NEED_FOLLOWER" = true ]; then
+        FOLLOWER_DEV="$DEV"; FOLLOWER_VID="$VID"; FOLLOWER_PID="$PID"; FOLLOWER_SERIAL="$SERIAL"
+    fi
+
+    echo ""
+    log "配置确认："
+    info "$label: $DEV  (VID=0x$VID PID=0x$PID Serial=$SERIAL)"
+    read -rp "  确认? [Y/n]: " confirm
+    if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
+        select_single_arm "$label"
+        return
+    fi
+}
+
+# ──────────────────────────────────────────────
+# 3b. 交互式选择主臂和从臂（同一台机器两个臂）
 # ──────────────────────────────────────────────
 
 select_arms() {
@@ -197,10 +234,10 @@ select_arms() {
 
 generate_configs() {
     log "生成配置文件..."
-
     mkdir -p "$PROJECT/config"
 
-    cat > "$PROJECT/config/follower.toml" << EOF
+    if [ "$NEED_FOLLOWER" = true ]; then
+        cat > "$PROJECT/config/follower.toml" << EOF
 # config/follower.toml — 从臂
 # 由 setup-linux.sh 自动生成 ($(date '+%Y-%m-%d %H:%M'))
 
@@ -215,8 +252,11 @@ vid = "0x${FOLLOWER_VID}"
 pid = "0x${FOLLOWER_PID}"
 serial = "${FOLLOWER_SERIAL}"
 EOF
+        info "  $PROJECT/config/follower.toml"
+    fi
 
-    cat > "$PROJECT/config/leader.toml" << EOF
+    if [ "$NEED_LEADER" = true ]; then
+        cat > "$PROJECT/config/leader.toml" << EOF
 # config/leader.toml — 主臂 + Web 控制台
 # 由 setup-linux.sh 自动生成 ($(date '+%Y-%m-%d %H:%M'))
 
@@ -235,10 +275,10 @@ serial = "${LEADER_SERIAL}"
 bind = "0.0.0.0"
 port = 8080
 EOF
+        info "  $PROJECT/config/leader.toml"
+    fi
 
-    log "配置文件已生成:"
-    info "  $PROJECT/config/follower.toml"
-    info "  $PROJECT/config/leader.toml"
+    log "配置文件已生成"
 }
 
 # ──────────────────────────────────────────────
@@ -259,14 +299,21 @@ build_project() {
 
     cd "$PROJECT"
     sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
-    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+    if [ "$NEED_DORA" = true ]; then
+        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+    fi
 
-    # 部署到 bin/
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
-    cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
-    cp "$PROJECT/target/release/leader"   "$PROJECT/bin/leader"
-    cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
+    if [ "$NEED_FOLLOWER" = true ]; then
+        cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+        cp "$PROJECT/target/release/leader" "$PROJECT/bin/leader"
+    fi
+    if [ "$NEED_DORA" = true ]; then
+        cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
+    fi
     log "编译完成 → $PROJECT/bin/"
 }
 
@@ -278,11 +325,10 @@ register_services() {
     log "注册 systemd 服务..."
 
     mkdir -p "$PROJECT/logs"
-
     local venv="$PROJECT/training/.venv"
 
-    # 从臂服务
-    cat > /etc/systemd/system/dorarobot-follower.service << EOF
+    if [ "$NEED_FOLLOWER" = true ]; then
+        cat > /etc/systemd/system/dorarobot-follower.service << EOF
 [Unit]
 Description=DoraRobot Follower Daemon
 After=network.target
@@ -301,9 +347,11 @@ StandardError=append:$PROJECT/logs/follower.log
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl enable dorarobot-follower
+    fi
 
-    # 主臂 + Web 控制台服务
-    cat > /etc/systemd/system/dorarobot-leader.service << EOF
+    if [ "$NEED_LEADER" = true ]; then
+        cat > /etc/systemd/system/dorarobot-leader.service << EOF
 [Unit]
 Description=DoraRobot Leader Daemon + Web Console
 After=network.target
@@ -322,10 +370,10 @@ StandardError=append:$PROJECT/logs/leader.log
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl enable dorarobot-leader
+    fi
 
     systemctl daemon-reload
-    systemctl enable dorarobot-follower
-    systemctl enable dorarobot-leader
     log "systemd 服务已注册并设为开机自启"
 }
 
@@ -336,22 +384,30 @@ EOF
 start_services() {
     log "启动服务..."
 
-    systemctl start dorarobot-follower
-    systemctl start dorarobot-leader
-
-    sleep 3
-
-    echo ""
-    if systemctl is-active --quiet dorarobot-follower; then
-        log "从臂服务: ${GREEN}运行中${NC}"
-    else
-        warn "从臂服务: 启动失败，查看日志: journalctl -u dorarobot-follower -n 20"
+    if [ "$NEED_FOLLOWER" = true ]; then
+        systemctl start dorarobot-follower
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+        systemctl start dorarobot-leader
     fi
 
-    if systemctl is-active --quiet dorarobot-leader; then
-        log "主臂服务: ${GREEN}运行中${NC}"
-    else
-        warn "主臂服务: 启动失败，查看日志: journalctl -u dorarobot-leader -n 20"
+    sleep 3
+    echo ""
+
+    if [ "$NEED_FOLLOWER" = true ]; then
+        if systemctl is-active --quiet dorarobot-follower; then
+            log "从臂服务: ${GREEN}运行中${NC}"
+        else
+            warn "从臂服务: 启动失败，查看日志: journalctl -u dorarobot-follower -n 20"
+        fi
+    fi
+
+    if [ "$NEED_LEADER" = true ]; then
+        if systemctl is-active --quiet dorarobot-leader; then
+            log "主臂服务: ${GREEN}运行中${NC}"
+        else
+            warn "主臂服务: 启动失败，查看日志: journalctl -u dorarobot-leader -n 20"
+        fi
     fi
 }
 
@@ -370,9 +426,34 @@ main() {
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
+    # 询问部署角色
+    echo "  请选择部署角色："
+    echo "    [1] 主臂 (Leader)       — 主臂驱动 + Web 控制台"
+    echo "    [2] 从臂 (Follower)     — 从臂驱动 + DORA 录制"
+    echo "    [3] 全部 (Both)         — 主臂 + 从臂（同一台机器）"
+    echo ""
+    while true; do
+        read -rp "  选择 [1-3]: " ROLE
+        case "$ROLE" in
+            1) NEED_DORA=false; NEED_LEADER=true;  NEED_FOLLOWER=true;  break ;;
+            2) NEED_DORA=true;  NEED_LEADER=false; NEED_FOLLOWER=true;  break ;;
+            3) NEED_DORA=true;  NEED_LEADER=true;  NEED_FOLLOWER=true;  break ;;
+            *) warn "无效选择，请输入 1/2/3" ;;
+        esac
+    done
+
     check_deps
     scan_usb_devices
-    select_arms
+
+    # 根据角色决定是否需要选择两个臂
+    if [ "$NEED_LEADER" = true ] && [ "$NEED_FOLLOWER" = true ]; then
+        select_arms
+    elif [ "$NEED_LEADER" = true ]; then
+        select_single_arm "主臂 (Leader)"
+    else
+        select_single_arm "从臂 (Follower)"
+    fi
+
     generate_configs
 
     echo ""
@@ -386,11 +467,11 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   部署完成！                               ║"
+    echo "  ║   部署完成！                              ║"
     echo "  ╠══════════════════════════════════════════╣"
-    echo "  ║  Web 控制台: http://<本机IP>:8080          ║"
-    echo "  ║  查看日志:   journalctl -u dorarobot-* -f  ║"
-    echo "  ║  停止服务:   systemctl stop dorarobot-*    ║"
+    echo "  ║  Web 控制台: http://<本机IP>:8080         ║"
+    echo "  ║  查看日志:   journalctl -u dorarobot-* -f ║"
+    echo "  ║  停止服务:   systemctl stop dorarobot-*   ║"
     echo "  ╚══════════════════════════════════════════╝"
 }
 
