@@ -93,13 +93,15 @@ fn main() -> eyre::Result<()> {
         }
     });
 
-    let (mut node, mut events) = DoraNode::init_from_env()?;
+    let (mut node, _events) = DoraNode::init_from_env()?;
 
     let mut last_send = std::time::Instant::now();
     let send_interval = std::time::Duration::from_millis(33); // ~30 Hz
 
+    // Main loop: drain MPSC → send DORA outputs.
+    // recv_timeout with short timeout keeps the CPU from spinning.
+    // When the event stream is done, recv_timeout returns None and we exit.
     loop {
-        // Pump DORA events and drain our mpsc channel
         while let Ok(msg) = rx.try_recv() {
             match msg {
                 Captured::Action(a) => {
@@ -135,15 +137,9 @@ fn main() -> eyre::Result<()> {
                 }
             }
         }
-
-        match events.recv_timeout(Duration::from_millis(10)) {
-            Some(event) => {
-                if matches!(event, dora_node_api::Event::Stop) || matches!(event, dora_node_api::Event::AllInputsClosed) {
-                    break;
-                }
-            }
-            None => {}
-        }
+        // No DORA inputs to handle — keep forwarding zenoh data indefinitely.
+        // The DORA daemon will kill this process when the dataflow stops.
+        std::thread::sleep(Duration::from_millis(1));
     }
 
     Ok(())
