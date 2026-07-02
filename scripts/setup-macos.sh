@@ -14,6 +14,12 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
+# sudo 默认清除代理环境变量，手动保留
+for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY; do
+    val=$(eval echo "\${$var}" 2>/dev/null || true)
+    [ -n "$val" ] && export "$var"="$val"
+done
+
 # ──────────────────────────────────────────────
 # 1. 前置检查
 # ──────────────────────────────────────────────
@@ -29,8 +35,12 @@ check_deps() {
         REAL_HOME="$HOME"
     fi
 
-    # Rust — 自动安装（以实际用户身份）
-    if ! sudo -u "$REAL_USER" command -v cargo >/dev/null 2>&1; then
+    local CARGO_BIN="$REAL_HOME/.cargo/bin/cargo"
+    local UV_BIN="$REAL_HOME/.local/bin/uv"
+    local DORA_BIN="$REAL_HOME/.local/bin/dora"
+
+    # Rust
+    if [ ! -x "$CARGO_BIN" ]; then
         warn "Rust 未安装，正在自动安装..."
         sudo -u "$REAL_USER" bash -c "
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -38,8 +48,8 @@ check_deps() {
         log "Rust 已安装"
     fi
 
-    # uv — 自动安装（以实际用户身份）
-    if ! sudo -u "$REAL_USER" command -v uv >/dev/null 2>&1; then
+    # uv
+    if [ ! -x "$UV_BIN" ]; then
         warn "uv 未安装，正在自动安装..."
         sudo -u "$REAL_USER" bash -c "
             curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -50,7 +60,7 @@ check_deps() {
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
     # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
-    if ! command -v dora >/dev/null; then
+    if [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译安装..."
         if [ ! -d "$PROJECT/dora" ]; then
             warn "dora 源码不存在，正在自动克隆..."
