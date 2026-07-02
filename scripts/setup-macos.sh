@@ -17,22 +17,33 @@ info() { echo -e "${CYAN}        $*${NC}"; }
 # ──────────────────────────────────────────────
 # 1. 前置检查
 # ──────────────────────────────────────────────
-
 check_deps() {
     log "检查前置依赖..."
-    # Rust — 自动安装
-    if ! command -v cargo >/dev/null; then
+
+    # 如果通过 sudo 运行，以实际用户身份安装 Rust/uv/dora
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local REAL_HOME
+    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
+        REAL_HOME=$(eval echo "~$REAL_USER")
+    else
+        REAL_HOME="$HOME"
+    fi
+
+    # Rust — 自动安装（以实际用户身份）
+    if ! sudo -u "$REAL_USER" command -v cargo >/dev/null 2>&1; then
         warn "Rust 未安装，正在自动安装..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
+        sudo -u "$REAL_USER" bash -c "
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        "
         log "Rust 已安装"
     fi
 
-    # uv — 自动安装
-    if ! command -v uv >/dev/null; then
+    # uv — 自动安装（以实际用户身份）
+    if ! sudo -u "$REAL_USER" command -v uv >/dev/null 2>&1; then
         warn "uv 未安装，正在自动安装..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
+        sudo -u "$REAL_USER" bash -c "
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+        "
         log "uv 已安装"
     fi
 
