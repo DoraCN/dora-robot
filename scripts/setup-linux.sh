@@ -514,12 +514,12 @@ main() {
         select_single_arm "从臂 (Follower)"
     fi
 
-    # 机械臂 ID
+    # 实例序号（zenoh 通道隔离不同臂对）
     echo ""
-    read -rp "  机械臂 ID (默认: 1): " ARM_NUM
+    read -rp "  实例序号 (默认: 1): " ARM_NUM
     ARM_NUM="${ARM_NUM:-1}"
     ARM_ID="arm_${ARM_NUM}"
-    log "机械臂 ID: $ARM_ID"
+    log "实例序号: $ARM_ID"
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
