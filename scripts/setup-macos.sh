@@ -323,15 +323,16 @@ install_venv() {
         REAL_HOME="$HOME"
     fi
     local CARGO_BIN="$REAL_HOME/.cargo/bin/cargo"
+    local UV_BIN="$REAL_HOME/.local/bin/uv"
     local VENV="$PROJECT/training/.venv"
     local VENV_PYTHON="$VENV/bin/python"
 
     if [ ! -d "$VENV" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv venv "$VENV" --python 3.12 || err "创建 venv 失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
     fi
 
     log "安装 Python 依赖 (numpy, opencv, pyarrow, lerobot)..."
-    sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv pip install --python "$VENV_PYTHON" \
+    sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" pip install --python "$VENV_PYTHON" \
         numpy opencv-python pyarrow pyyaml lerobot || err "pip install 失败"
 
     log "构建 DORA Python 包..."
@@ -347,7 +348,7 @@ install_venv() {
 
     local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
     if [ -n "$wheel" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
         log "DORA Python 包已安装"
     fi
     log "Python 环境安装完成"
