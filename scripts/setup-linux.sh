@@ -80,17 +80,12 @@ check_deps() {
         if [ ! -d "$PROJECT/dora" ]; then
             warn "dora 源码不存在，正在自动克隆..."
             sudo -u "$REAL_USER" env $PROXY_ENV \
-                git clone --branch v1.0.0-rc1 https://github.com/dora-rs/dora.git "$PROJECT/dora" || {
-                warn "git clone --branch 失败，尝试完整克隆..."
-                sudo -u "$REAL_USER" env $PROXY_ENV \
-                    git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
-            }
+                git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
         fi
         cd "$PROJECT/dora"
-        if ! git describe --tags --exact-match 2>/dev/null | grep -q "v1.0.0-rc1"; then
-            warn "切换到 v1.0.0-rc1..."
-            git fetch --tags 2>/dev/null || true
-            git checkout v1.0.0-rc1 2>/dev/null || warn "git checkout 失败，继续编译（可能版本不匹配）"
+        git fetch --tags 2>/dev/null || true
+        if ! git checkout v1.0.0-rc1 2>/dev/null; then
+            warn "tag v1.0.0-rc1 不存在，使用默认分支..."
         fi
         cd "$PROJECT"
         sudo -u "$REAL_USER" env $PROXY_ENV \
