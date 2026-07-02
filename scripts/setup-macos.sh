@@ -14,7 +14,14 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
-# sudo 默认清除代理环境变量，手动保留
+# 代理环境变量（sudo 默认清除，需显式传递到子进程）
+PROXY_ENV=""
+for v in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY; do
+    eval "val=\${$v:-}"
+    [ -n "$val" ] && PROXY_ENV="$PROXY_ENV $v='$val'"
+done
+
+# 同时保留到当前 shell
 for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY; do
     val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
     [ -n "$val" ] && export "${var}=${val}" || true
@@ -42,7 +49,7 @@ check_deps() {
     # Rust
     if [ ! -x "$CARGO_BIN" ]; then
         warn "Rust 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" bash -c "
+        sudo -u "$REAL_USER" env $PROXY_ENV bash -c "
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         "
         log "Rust 已安装"
@@ -51,7 +58,7 @@ check_deps() {
     # uv
     if [ ! -x "$UV_BIN" ]; then
         warn "uv 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" bash -c "
+        sudo -u "$REAL_USER" env $PROXY_ENV bash -c "
             curl -LsSf https://astral.sh/uv/install.sh | sh
         "
         log "uv 已安装"
@@ -64,9 +71,11 @@ check_deps() {
         warn "dora CLI 未安装，从源码编译安装..."
         if [ ! -d "$PROJECT/dora" ]; then
             warn "dora 源码不存在，正在自动克隆..."
-            sudo -u "$REAL_USER" git clone --branch v1.0.0-rc1 https://github.com/dora-rs/dora.git "$PROJECT/dora" || {
+            sudo -u "$REAL_USER" env $PROXY_ENV \
+                git clone --branch v1.0.0-rc1 https://github.com/dora-rs/dora.git "$PROJECT/dora" || {
                 warn "git clone --branch 失败，尝试完整克隆..."
-                sudo -u "$REAL_USER" git clone https://github.com/dora-rs/dora.git "$PROJECT/dora"
+                sudo -u "$REAL_USER" env $PROXY_ENV \
+                    git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
             }
         fi
         cd "$PROJECT/dora"
@@ -76,7 +85,8 @@ check_deps() {
             git checkout v1.0.0-rc1 2>/dev/null || warn "git checkout 失败，继续编译（可能版本不匹配）"
         fi
         cd "$PROJECT"
-        sudo -u "$REAL_USER" "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV \
+            "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
         mkdir -p "$REAL_HOME/.local/bin"
         cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
         chown "$REAL_USER" "$REAL_HOME/.local/bin/dora" 2>/dev/null || true
@@ -264,8 +274,8 @@ build_project() {
     local CARGO="$REAL_HOME/.cargo/bin/cargo"
 
     cd "$PROJECT"
-    sudo -u "$REAL_USER" "$CARGO" build --release || err "编译失败"
-    sudo -u "$REAL_USER" "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
+    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
 
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
@@ -395,7 +405,7 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   DoraRobot 一键部署脚本 (macOS)        ║"
+    echo "  ║   DoraRobot 一键部署脚本 (macOS)           ║"
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
@@ -415,10 +425,10 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   部署完成！                            ║"
+    echo "  ║   部署完成！                               ║"
     echo "  ╠══════════════════════════════════════════╣"
-    echo "  ║  Web 控制台: http://localhost:8080       ║"
-    echo "  ║  查看日志:   tail -f logs/follower.log   ║"
+    echo "  ║  Web 控制台: http://localhost:8080        ║"
+    echo "  ║  查看日志:   tail -f logs/follower.log    ║"
     echo "  ║  停止服务:   sudo launchctl stop ...      ║"
     echo "  ╚══════════════════════════════════════════╝"
 }

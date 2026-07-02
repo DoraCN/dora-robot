@@ -282,7 +282,7 @@ function Main {
 
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════╗"
-    Write-Host "  ║   DoraRobot 一键部署脚本 (Windows)      ║"
+    Write-Host "  ║   DoraRobot 一键部署脚本 (Windows)           ║"
     Write-Host "  ╚════════════════════════════════════════════╝"
     Write-Host ""
 
@@ -301,10 +301,10 @@ function Main {
 
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════╗"
-    Write-Host "  ║   部署完成！                              ║"
+    Write-Host "  ║   部署完成！                                 ║"
     Write-Host "  ╠════════════════════════════════════════════╣"
-    Write-Host "  ║  Web 控制台: http://localhost:8080         ║"
-    Write-Host "  ║  查看日志:   type logs\follower.log        ║"
+    Write-Host "  ║  Web 控制台: http://localhost:8080          ║"
+    Write-Host "  ║  查看日志:   type logs\follower.log         ║"
     Write-Host "  ║  停止服务:   Stop-ScheduledTask ...         ║"
     Write-Host "  ╚════════════════════════════════════════════╝"
 }
