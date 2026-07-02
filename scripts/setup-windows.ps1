@@ -1,4 +1,4 @@
-# setup-windows.ps1 — SO-101 遥操作系统一键部署脚本 (Windows)
+# setup-windows.ps1 — DoraRobot 一键部署脚本 (Windows)
 #
 # 使用（PowerShell 管理员）：
 #   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -100,7 +100,7 @@ function Scan-USBDevices {
     }
 
     if ($i -eq 0) {
-        Write-Err "未发现 COM 端口。请连接 SO-101 臂并重试。"
+        Write-Err "未发现 COM 端口。请连接机械臂并重试。"
     }
 
     Write-Host ""
@@ -279,7 +279,7 @@ function Main {
 
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════╗"
-    Write-Host "  ║   DoraRobot SO-101 一键部署脚本 (Windows)  ║"
+    Write-Host "  ║   DoraRobot 一键部署脚本 (Windows)      ║"
     Write-Host "  ╚════════════════════════════════════════════╝"
     Write-Host ""
 

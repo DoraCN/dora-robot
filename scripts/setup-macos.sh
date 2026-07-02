@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-macos.sh — SO-101 遥操作系统一键部署脚本 (macOS)
+# setup-macos.sh — DoraRobot 一键部署脚本 (macOS)
 #
 # 使用：
 #   chmod +x scripts/setup-macos.sh
@@ -137,7 +137,7 @@ scan_usb_devices() {
     done
 
     if [ "$i" -eq 0 ]; then
-        err "未发现 USB 串口设备 (/dev/cu.usbmodem*)。请连接 SO-101 臂并重试。"
+            err "未发现 USB 串口设备 (/dev/cu.usbmodem*)。请连接机械臂并重试。"
     fi
 
     echo ""
@@ -371,7 +371,7 @@ main() {
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   DoraRobot SO-101 一键部署脚本 (macOS)  ║"
+    echo "  ║   DoraRobot 一键部署脚本 (macOS)        ║"
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
