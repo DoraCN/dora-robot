@@ -14,17 +14,20 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
-# 代理环境变量（sudo 默认清除，需显式传递到子进程）
-PROXY_ENV=""
-for v in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY; do
-    eval "val=\${$v:-}"
-    [ -n "$val" ] && PROXY_ENV="$PROXY_ENV $v=$val"
-done
+# 代理环境变量（sudo 默认清除，需保留到子进程）
+PROXY_ENV_CMD=""
+ALL_PROXY_VARS="https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY"
 
-# 同时保留到当前 shell
-for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY; do
+# 先导出到当前 shell（避免 sudo 非法参数）
+for var in $ALL_PROXY_VARS; do
     val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
     [ -n "$val" ] && export "${var}=${val}" || true
+done
+
+# 构建正确的 env 命令字符串
+for var in $ALL_PROXY_VARS; do
+    val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
+    [ -n "$val" ] && PROXY_ENV_CMD="${PROXY_ENV_CMD}${PROXY_ENV_CMD:+ }$var=${val}"
 done
 
 # ──────────────────────────────────────────────
@@ -49,7 +52,7 @@ check_deps() {
     # Rust
     if [ ! -x "$CARGO_BIN" ]; then
         warn "Rust 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" env $PROXY_ENV bash -c "
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD bash -c "
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         "
         log "Rust 已安装"
@@ -58,7 +61,7 @@ check_deps() {
     # uv
     if [ ! -x "$UV_BIN" ]; then
         warn "uv 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" env $PROXY_ENV bash -c "
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD bash -c "
             curl -LsSf https://astral.sh/uv/install.sh | sh
         "
         log "uv 已安装"
@@ -69,7 +72,7 @@ check_deps() {
     # DORA 源码 — 编译 workspace 需要的依赖，任意模式下都必须存在
     if [ ! -d "$PROJECT/dora" ]; then
         warn "dora 源码不存在，正在自动克隆（workspace 依赖需要）..."
-        sudo -u "$REAL_USER" env $PROXY_ENV \
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
             git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
     fi
 
@@ -77,7 +80,7 @@ check_deps() {
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译安装..."
         cd "$PROJECT"
-        sudo -u "$REAL_USER" env $PROXY_ENV PYO3_PYTHON="${PYO3_PYTHON:-}" \
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD PYO3_PYTHON="${PYO3_PYTHON:-}" \
             "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
         mkdir -p "$REAL_HOME/.local/bin"
         cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
@@ -99,7 +102,7 @@ ensure_python312() {
         log "Python venv 已存在，跳过创建"
     else
         log "预创建 Python 3.12 虚拟环境（供 DORA 编译使用）..."
-        sudo -u "$REAL_USER" env $PROXY_ENV \
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
             "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
         log "Python 3.12 venv 已创建 → $VENV"
     fi
@@ -315,27 +318,27 @@ install_venv() {
     local VENV_PYTHON="$VENV/bin/python"
 
     if [ ! -d "$VENV" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV uv venv "$VENV" --python 3.12 || err "创建 venv 失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv venv "$VENV" --python 3.12 || err "创建 venv 失败"
     fi
 
     log "安装 Python 依赖 (numpy, opencv, pyarrow, lerobot)..."
-    sudo -u "$REAL_USER" env $PROXY_ENV uv pip install --python "$VENV_PYTHON" \
+    sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv pip install --python "$VENV_PYTHON" \
         numpy opencv-python pyarrow pyyaml lerobot || err "pip install 失败"
 
     log "构建 DORA Python 包..."
     if ! command -v maturin >/dev/null; then
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO_BIN" install maturin || warn "maturin 编译失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO_BIN" install maturin || warn "maturin 编译失败"
         MATURIN="$REAL_HOME/.cargo/bin/maturin"
     else
         MATURIN="maturin"
     fi
 
-    sudo -u "$REAL_USER" env $PROXY_ENV PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
+    sudo -u "$REAL_USER" env $PROXY_ENV_CMD PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
         -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
 
     local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
     if [ -n "$wheel" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV uv pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD uv pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
         log "DORA Python 包已安装"
     fi
     log "Python 环境安装完成"
@@ -358,9 +361,9 @@ build_project() {
     local CARGO="$REAL_HOME/.cargo/bin/cargo"
 
     cd "$PROJECT"
-    sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build --release || err "编译失败"
+    sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO" build --release || err "编译失败"
     if [ "$NEED_DORA" = true ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
     fi
 
     log "部署二进制到 bin/..."
