@@ -128,13 +128,11 @@ fn main() -> eyre::Result<()> {
                 Captured::EpisodeReRecord => {
                     let mut meta = BTreeMap::new();
                     meta.insert("cmd".into(), dora_node_api::Parameter::String("ReRecord".into()));
-                    meta.insert("outcome".into(), dora_node_api::Parameter::String("Fail".into()));
                     node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
                 Captured::EpisodeStop => {
                     let mut meta = BTreeMap::new();
                     meta.insert("cmd".into(), dora_node_api::Parameter::String("Stop".into()));
-                    meta.insert("outcome".into(), dora_node_api::Parameter::String("Fail".into()));
                     node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
                 }
             }
