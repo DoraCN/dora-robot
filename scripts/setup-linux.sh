@@ -473,6 +473,7 @@ After=network.target
 [Service]
 Type=simple
 User=$REAL_USER
+SupplementaryGroups=video dialout
 WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
@@ -497,6 +498,7 @@ After=network.target
 [Service]
 Type=simple
 User=$REAL_USER
+SupplementaryGroups=video dialout
 WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
