@@ -1,167 +1,186 @@
-# dora-robot — SO-101 主从遥操作 + LeRobot 采集
+# DoraRobot
 
-基于 Rust (DORA + feetech-servo-sdk) 与 zenoh 的**实时同构机械臂遥操作与数据集录制**平台。
-
----
-
-## 快速开始
-
-### 环境
-
-- 两台机器各接一只 SO-101 机械臂（Feetech 舵机，USB）
-- 同一局域网（zenoh peer 模式自动发现）
-- Rust 1.95+、Python 3.12+
-
-### 构建
-
-```sh
-cargo build --workspace
-cargo test --workspace          # 所有测试（含 tr-so101 MockBus 16 测）
-```
+**DoraRobot** is a cross-platform teleoperation data collection platform built on Rust and [DORA](https://dora-rs.ai). It enables real-time leader-follower teleoperation, multimodal recording (proprioception + multi-camera video), and produces [LeRobot](https://github.com/huggingface/lerobot) v3-compatible datasets for imitation learning.
 
 ---
 
-## 实时遥操作（主臂 → zenoh → 从臂）
+## Features
 
-两台机器，一个终端各跑一边：
-
-**机器 A — 主臂（Leader）**
-```sh
-cargo run -p tr-so101 --example leader_teleop_zenoh -- /dev/cu.usbmodem5AB01836201
-```
-
-**机器 B — 从臂（Follower）**
-```sh
-cargo run -p tr-so101 --example zenoh_follower -- /dev/cu.usbmodem5A7A0555021
-```
-
-搬动主臂 → 从臂实时跟随。
-
-> **多对隔离**：不同臂对用不同 key 区分——`--key tr/arm_1` 和 `--key tr/arm_2` 互不干扰。
+- **Real-time teleoperation** — Leader arm drives follower arm via zenoh pub/sub over LAN (<50ms latency)
+- **Multimodal recording** — Joint states (action/observation) + multi-camera video at 30 FPS
+- **LeRobot v3 output** — Datasets directly loadable by LeRobot for training
+- **Web console** — Browser-based control panel with real-time status (SSE), anti-misoperation button states
+- **System services** — Follower and leader daemons run as OS services (launchd / systemd / Task Scheduler), auto-start on boot, auto-restart on crash
+- **Multi-arm ready** — Arm type is a config parameter; currently supports SO-101 (Feetech STS3215); UR5 and other robot drivers planned
+- **Cross-platform** — macOS, Linux, Windows
 
 ---
 
-## 录制（遥操 + 键盘控制 → LeRobot v3）
+## Architecture
 
-### 一次配置
-
-```sh
-cd training
-uv python install 3.12
-uv venv --python 3.12
-source .venv/bin/activate
-uv sync                           # 从本地 lerobot/ 源码安装 lerobot
+```
+Leader Machine                          Follower Machine
+┌──────────────────────────┐            ┌────────────────────────────────────────┐
+│ leader-daemon            │            │ follower-daemon (OS service)           │
+│  ├─ USB arm driver       │  ═ zenoh ═ │  ├─ USB arm driver                     │
+│  ├─ Web console (:8080)  │            │  ├─ State machine (Idle→Ready→Rec)     │
+│  └─ Control + Command pub│            │  └─ DORA dataflow (on torque enable)   │
+└──────────────────────────┘            │     ├─ capture (zenoh→Arrow bridge)    │
+                                        │     ├─ camera_front / camera_wrist     │
+                                        │     └─ recorder (→ LeRobot v3 dataset) │
+                                        └────────────────────────────────────────┘
 ```
 
-### 录制会话
+**Communication**: zenoh peer mode (auto-discovery over LAN).  
+**Recording**: DORA dataflow on follower machine — capture node bridges zenoh ↔ Arrow, camera nodes acquire on tick, recorder writes LeRobot v3.  
+**Control path and recording path are decoupled** — recording failure never impacts teleoperation.
 
-**机器 B — 从臂 + 录制（先启动）**
-```sh
-PYTHONPATH=training \
-  cargo run -p tr-so101 --example zenoh_follower -- /dev/cu.usbmodem5A7A0555021 --record \
-  | training/.venv/bin/python -m tr_lerobot.pipe_recorder --task "grab cube"
+---
+
+## Quick Start
+
+See [docs/getting-started.md](docs/getting-started.md) for the complete from-scratch guide covering all three operating systems.
+
+### Prerequisites
+
+- Rust ≥1.88, Python 3.12+, uv, [DORA CLI](https://github.com/dora-rs/dora) 1.0.0-rc1
+- Two robotic arms (currently SO-101) connected via USB
+- Two cameras (optional, Logitech C920 recommended)
+
+### One-Command Setup
+
+```bash
+# Linux
+sudo ./scripts/setup-linux.sh
+
+# macOS
+sudo ./scripts/setup-macos.sh
+
+# Windows (PowerShell as Administrator)
+.\scripts\setup-windows.ps1
 ```
 
-**机器 A — 主臂（后启动，在**此终端**用键盘控制回合）**
-```sh
-cargo run -p tr-so101 --example leader_teleop_zenoh -- /dev/cu.usbmodem5AB01836201
-```
+The setup script will:
+1. Scan USB devices
+2. Let you select leader and follower arms
+3. Generate configuration files
+4. Build the project
+5. Register OS services (auto-start on boot)
+6. Start the daemons
 
-### 键盘控制（主臂终端）
+### Manual Setup
 
-| 键 | 功能 | 说明 |
-|---|---|---|
-| `s` | **Start** | 开始一个新回合（进入 RECORDING 状态） |
-| `Enter` | **Success** | 结束当前回合并**保存**（回到 IDLE） |
-| `f` | **Fail** | 结束当前回合并**丢弃**（回到 IDLE） |
-| `r` | **Rerecord** | 丢弃当前回合，**立即开始重录**（留在 RECORDING） |
-| `q` | **Quit** | 停止主臂 → 从臂卸力退出 → 录制 `finalize()` |
+```bash
+# Build
+cargo build --release
+cargo build -p tr-capture --release
+mkdir -p bin
+cp target/release/follower target/release/leader target/release/tr-capture bin/
 
-**流程示例**：
-```
-s → 搬臂做任务 → Enter（保存回合1）
-s → 搬臂做任务 → f（放弃回合2）
-s → 搬臂做任务 → r（不满意，重录→继续搬臂→ Enter（保存回合3）
-q（结束）
-```
+# Configure (edit VID/PID/Serial from `cargo run -p tr-so101 --example usb_scan`)
+#   config/follower.toml
+#   config/leader.toml
 
-### 验证录制结果
+# Run follower daemon
+./bin/follower --config config/follower.toml
 
-```sh
-cd training && source .venv/bin/activate
-python -c "
-from lerobot.datasets import LeRobotDataset
-ds = LeRobotDataset('local/teleop', root='../datasets')
-s = ds[0]
-print('episodes:', ds.meta.info['total_episodes'])
-print('frames:  ', len(ds))
-print('keys:    ', list(s.keys()))
-"
-# > episodes: 3
-# > frames:   748
-# > keys:     ['action', 'observation.state', ...]
+# Run leader daemon + web console
+./bin/leader --config config/leader.toml
+# → Open http://localhost:8080
 ```
 
 ---
 
-## 对比测试：TCP 直连
+## Operation
 
-和 zenoh 同样的操作方式，但走原生 TCP（零额外依赖，用于对比网络延迟）：
+### Web Console
 
-**从臂（先启动）**
-```sh
-cargo run -p tr-so101 --example tcp_follower -- /dev/cu.usbmodem5A7A0555021 0.0.0.0:9000
-```
-
-**主臂（后启动，`192.168.x.x` 换成从臂 IP）**
-```sh
-cargo run -p tr-so101 --example leader_teleop_tcp -- /dev/cu.usbmodem5AB01836201 192.168.x.x:9000
-```
-
----
-
-## 诊断工具
-
-### 纯读主臂关节（不连网）
-```sh
-cargo run -p tr-so101 --example leader_diag -- /dev/cu.usbmodem5AB01836201
-```
-
-### 主臂录制到 CSV
-```sh
-cargo run -p tr-so101 --example leader_teleop_debug -- /dev/cu.usbmodem5AB01836201 --output logs/my.csv
-```
-
-### CSV 回放到从臂（离线测试）
-```sh
-cargo run -p tr-so101 --example follower_replay -- /dev/cu.usbmodem5A7A0555021 logs/my.csv
-```
-
----
-
-## 项目结构
-
-| 路径 | 用途 |
+| State | Available Actions |
 |---|---|
-| `crates/tr-messages` | 规范化消息契约（`TeleopCommand`/`RobotFeedback`/`EpisodeEvent`）+ `Codec` trait |
-| `crates/tr-codec` | postcard 编解码实现（command/feedback/episode） |
-| `crates/tr-transport` | `Transport` trait + QoS/分帧 + TCP/UDP/Loopback |
-| `crates/tr-transport-zenoh` | zenoh 1.9 `Transport` 实现（pub/sub） |
-| `crates/tr-session` | 会话生命周期 / 能力协商 / 看门狗 |
-| `crates/tr-teleop` | `TeleopDevice` trait |
-| `crates/tr-robot` | `RobotDriver` trait + `SimRobot` |
-| `crates/tr-so101` | SO-101 硬件抽象（`So101Arm`/`So101Leader`/`So101Follower`）+ 16 个 MockBus 单测 |
-| `tr-so101/examples/` | 所有可执行工具（遥操 / 录制 / 回放 / 诊断） |
-| `training/` | Python 子项目：录制器 / 校验 / 训练 |
+| **待机** (Idle) | ⚡ 使能 |
+| **就绪** (Ready) | ⏻ 失能, ▶ 开始采集 |
+| **采集中** (Recording) | ⏻ 失能, ✅ 成功保存, 🔄 重录, ⏹ 停止采集 |
 
-## 文档
+> Buttons are automatically enabled/disabled based on FSM state — no misoperation possible.
 
-| 文档 | 内容 |
+### Keyboard (alternative)
+
+```
+o → 使能    x → 失能
+s → 开始采集  f → 成功保存
+r → 重录      q → 停止
+```
+
+### Session Flow
+
+```
+⚡ 使能 → 搬动主臂 → ▶ 开始采集 → 执行任务 → ✅ 成功保存
+                                              → 🔄 重录（不满意）
+                                              → 开始下一个 episode ...
+         → ⏻ 失能（结束 session）
+```
+
+Each torque-on session creates a timestamped dataset directory:
+```
+datasets/2026-07-02/14-30-00/
+  data/     — joint action & observation (parquet)
+  meta/     — dataset metadata (info.json)
+  videos/   — camera recordings (mp4)
+```
+
+---
+
+## Project Structure
+
+```
+dora-robot/
+├── bin/                     ← Compiled binaries (gitignored)
+├── config/                  ← Arm configuration (follower.toml, leader.toml)
+├── crates/
+│   ├── tr-messages/         ← Canonical message contract (std-only)
+│   ├── tr-codec/            ← postcard codec implementation
+│   ├── tr-transport/        ← Transport trait (QoS, framing)
+│   ├── tr-transport-zenoh/  ← Zenoh transport implementation
+│   ├── tr-so101/            ← SO-101 hardware driver + resolver + examples
+│   ├── tr-daemon/           ← Daemon library (state machine, DORA lifecycle, web)
+│   └── tr-capture/          ← DORA capture node (zenoh → Arrow bridge)
+├── dataflows/               ← DORA dataflow YAML definitions
+├── training/                ← Python: recorder, camera node, LeRobot writer
+├── scripts/                 ← Auto-setup scripts (Linux/macOS/Windows)
+├── docs/                    ← Design documents and specs
+│   ├── getting-started.md
+│   ├── service-setup.md
+│   └── specs/               ← SDD specifications
+└── constitution.md          ← Project-wide constraints
+```
+
+---
+
+## Adding a New Robot Type
+
+1. Implement `TeleopDevice` and `RobotDriver` traits for the new arm
+2. Create a new crate under `crates/tr-<name>/`
+3. Add a config section `[arm.<name>]` with arm-specific parameters
+4. Set `type = "<name>"` in `config/follower.toml`
+
+See `crates/tr-so101/` and `config/follower.toml` as reference.
+
+---
+
+## Documentation
+
+| Document | Description |
 |---|---|
-| `docs/architecture.md` | 三端解耦总架构 |
-| `docs/so101-teleoperation-design.md` | SO-101 主从遥操技术方案 |
-| `docs/lerobot-dataset-v3-format.md` | LeRobot v3 真实格式（源码核实） |
-| `docs/recording-video-encoding-performance.md` | 视频编码性能设计 |
-| `docs/dora-node-api-spike.md` | dora-node-api 0.5.0 API 记录 |
-| `docs/specs/001-so101-teleop-record/` | SDD 规格（spec / plan / tasks） |
-| `constitution.md` | 项目宪法（全局约束） |
+| [Getting Started](docs/getting-started.md) | Full setup guide (all OS) |
+| [Service Setup](docs/service-setup.md) | Register as OS service (auto-start) |
+| [Architecture](docs/architecture.md) | Three-tier decoupled architecture |
+| [USB Resolver](docs/usb-resolver-integration.md) | Persistent USB device identification |
+| [Service Design](docs/service-based-teleop-console-design.md) | Daemon service + web console design |
+| [Camera Integration](docs/camera-integration-design.md) | Camera capture pipeline |
+| [constitution.md](constitution.md) | Project-wide design constraints |
+
+---
+
+## License
+
+Apache 2.0

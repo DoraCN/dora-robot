@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 use tr_codec::PostcardCodec;
-use tr_messages::control::ControlCommand;
 use tr_messages::Codec;
 use tr_messages::CommandBody;
+use tr_messages::control::ControlCommand;
 use tr_transport::Transport;
 use tr_transport_zenoh::ZenohTransport;
 
@@ -39,9 +39,17 @@ fn main() -> eyre::Result<()> {
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1).enable_io().enable_time().build().unwrap();
+            .worker_threads(1)
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_ctrl) {
-            Ok(s) => s, Err(e) => { eprintln!("capture ctrl: {e}"); return; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("capture ctrl: {e}");
+                return;
+            }
         };
         loop {
             if let Ok(Some(inbound)) = sub.recv(Duration::from_millis(5)) {
@@ -57,9 +65,17 @@ fn main() -> eyre::Result<()> {
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1).enable_io().enable_time().build().unwrap();
+            .worker_threads(1)
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_obs) {
-            Ok(s) => s, Err(e) => { eprintln!("capture obs: {e}"); return; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("capture obs: {e}");
+                return;
+            }
         };
         loop {
             if let Ok(Some(inbound)) = sub.recv(Duration::from_millis(5)) {
@@ -72,17 +88,26 @@ fn main() -> eyre::Result<()> {
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1).enable_io().enable_time().build().unwrap();
+            .worker_threads(1)
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
         let mut sub = match ZenohTransport::subscriber(rt.handle(), &k_cmd) {
-            Ok(s) => s, Err(e) => { eprintln!("capture cmd: {e}"); return; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("capture cmd: {e}");
+                return;
+            }
         };
         loop {
             if let Ok(Some(inbound)) = sub.recv(Duration::from_millis(5)) {
                 if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                     let msg = match cmd {
                         ControlCommand::StartRecord { task } => Captured::EpisodeStart { task },
-                        ControlCommand::EndRecord { outcome } =>
-                            Captured::EpisodeEnd(format!("{:?}", outcome)),
+                        ControlCommand::EndRecord { outcome } => {
+                            Captured::EpisodeEnd(format!("{:?}", outcome))
+                        }
                         ControlCommand::ReRecord => Captured::EpisodeReRecord,
                         ControlCommand::Stop => Captured::EpisodeStop,
                         _ => continue,
@@ -105,37 +130,79 @@ fn main() -> eyre::Result<()> {
         while let Ok(msg) = rx.try_recv() {
             match msg {
                 Captured::Action(a) => {
-                    if last_send.elapsed() < send_interval { continue; }
+                    if last_send.elapsed() < send_interval {
+                        continue;
+                    }
                     node.send_output("action".into(), Default::default(), Float32Array::from(a))?;
                 }
                 Captured::Observation(o) => {
-                    if last_send.elapsed() < send_interval { continue; }
-                    node.send_output("observation_state".into(), Default::default(), Float32Array::from(o))?;
+                    if last_send.elapsed() < send_interval {
+                        continue;
+                    }
+                    node.send_output(
+                        "observation_state".into(),
+                        Default::default(),
+                        Float32Array::from(o),
+                    )?;
                     last_send = std::time::Instant::now();
                 }
                 Captured::EpisodeStart { task } => {
                     let mut meta = BTreeMap::new();
-                    meta.insert("cmd".into(), dora_node_api::Parameter::String("StartRecord".into()));
+                    meta.insert(
+                        "cmd".into(),
+                        dora_node_api::Parameter::String("StartRecord".into()),
+                    );
                     meta.insert("task".into(), dora_node_api::Parameter::String(task));
-                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
+                    node.send_output(
+                        "episode_end".into(),
+                        meta,
+                        Float32Array::from(Vec::<f32>::new()),
+                    )?;
                 }
                 Captured::EpisodeEnd(outcome) => {
                     let mut meta = BTreeMap::new();
-                    meta.insert("cmd".into(), dora_node_api::Parameter::String("EndRecord".into()));
+                    meta.insert(
+                        "cmd".into(),
+                        dora_node_api::Parameter::String("EndRecord".into()),
+                    );
                     meta.insert("outcome".into(), dora_node_api::Parameter::String(outcome));
-                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
+                    node.send_output(
+                        "episode_end".into(),
+                        meta,
+                        Float32Array::from(Vec::<f32>::new()),
+                    )?;
                 }
                 Captured::EpisodeReRecord => {
                     let mut meta = BTreeMap::new();
-                    meta.insert("cmd".into(), dora_node_api::Parameter::String("ReRecord".into()));
-                    meta.insert("outcome".into(), dora_node_api::Parameter::String("fail".into()));
-                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
+                    meta.insert(
+                        "cmd".into(),
+                        dora_node_api::Parameter::String("ReRecord".into()),
+                    );
+                    meta.insert(
+                        "outcome".into(),
+                        dora_node_api::Parameter::String("fail".into()),
+                    );
+                    node.send_output(
+                        "episode_end".into(),
+                        meta,
+                        Float32Array::from(Vec::<f32>::new()),
+                    )?;
                 }
                 Captured::EpisodeStop => {
                     let mut meta = BTreeMap::new();
-                    meta.insert("cmd".into(), dora_node_api::Parameter::String("Stop".into()));
-                    meta.insert("outcome".into(), dora_node_api::Parameter::String("fail".into()));
-                    node.send_output("episode_end".into(), meta, Float32Array::from(Vec::<f32>::new()))?;
+                    meta.insert(
+                        "cmd".into(),
+                        dora_node_api::Parameter::String("Stop".into()),
+                    );
+                    meta.insert(
+                        "outcome".into(),
+                        dora_node_api::Parameter::String("fail".into()),
+                    );
+                    node.send_output(
+                        "episode_end".into(),
+                        meta,
+                        Float32Array::from(Vec::<f32>::new()),
+                    )?;
                 }
             }
         }
@@ -144,5 +211,5 @@ fn main() -> eyre::Result<()> {
         std::thread::sleep(Duration::from_millis(1));
     }
 
-    Ok(())
+    // Ok(())
 }
