@@ -112,11 +112,11 @@ h1{font-size:20px;margin-bottom:4px}
   <div class="st"><span id="led" class="online"></span> <span id="arm_id">arm_1</span></div>
 
   <div class="status-bar">
-    <div class="status-item"><span class="l">State</span><br><span class="v" id="state">--</span></div>
-    <div class="status-item"><span class="l">Torque</span><br><span class="v" id="torque">--</span></div>
-    <div class="status-item"><span class="l">Episode</span><br><span class="v" id="ep">--</span></div>
-    <div class="status-item"><span class="l">Frames</span><br><span class="v" id="frames">0</span></div>
-    <div class="status-item"><span class="l">FPS</span><br><span class="v" id="fps">0</span></div>
+    <div class="status-item"><span class="l">状态</span><br><span class="v" id="state">--</span></div>
+    <div class="status-item"><span class="l">扭矩</span><br><span class="v" id="torque">--</span></div>
+    <div class="status-item"><span class="l">录制</span><br><span class="v" id="rec">--</span></div>
+    <div class="status-item"><span class="l">回合</span><br><span class="v" id="ep">--</span></div>
+    <div class="status-item"><span class="l">帧数</span><br><span class="v" id="frames">0</span></div>
   </div>
 
   <div class="btn-row">
@@ -146,11 +146,11 @@ const evt = new EventSource('/api/status');
 evt.onmessage = function(e) {
   try {
     const s = JSON.parse(e.data);
-    document.getElementById('state').textContent = s.state;
+    document.getElementById('state').textContent = stateLabel(s.state);
     document.getElementById('torque').textContent = s.torque_on ? 'ON' : 'OFF';
-    document.getElementById('ep').textContent = s.recording ? '● REC' : '--';
+    document.getElementById('rec').textContent = s.recording ? '● 采集中' : '--';
+    document.getElementById('ep').textContent = s.episode || '--';
     document.getElementById('frames').textContent = s.frame_count || 0;
-    document.getElementById('fps').textContent = (s.fps || 0).toFixed(0);
     if (s.error) document.getElementById('err').textContent = s.error;
     else document.getElementById('err').textContent = '';
 
@@ -162,6 +162,11 @@ evt.onmessage = function(e) {
     updateButtons(s.state, s.torque_on, s.recording);
   } catch(_) {}
 };
+
+function stateLabel(s) {
+  const map = {IDLE:'待机', READY:'就绪', RECORDING:'采集中', OFFLINE:'离线'};
+  return map[s] || s;
+}
 
 function updateButtons(state, torque_on, recording) {
   document.getElementById('btn-torque-on').disabled  = (state !== 'IDLE');
