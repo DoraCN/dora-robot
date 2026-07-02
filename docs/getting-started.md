@@ -22,19 +22,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustc --version   # 应 ≥ 1.88
 ```
 
-### 0.3 Git + Git LFS
-
-| 平台 | 命令 |
-|---|---|
-| macOS | `brew install git git-lfs` |
-| Linux | `sudo apt install git git-lfs` |
-| Windows | `winget install Git.Git Git.Git.LFS` |
-
-```bash
-git lfs install
-```
-
-### 0.4 uv（Python 包管理 + venv）
+### 0.3 uv（Python 包管理 + venv）
 
 | 平台 | 命令 |
 |---|---|
@@ -46,7 +34,7 @@ git lfs install
 uv --version
 ```
 
-### 0.5 DORA CLI
+### 0.4 DORA CLI
 
 从 GitHub Releases 下载二进制：
 
@@ -83,14 +71,14 @@ Expand-Archive $env:TEMP\dora.zip -DestinationPath $env:LOCALAPPDATA\dora
 dora --version   # dora-cli 1.0.0-rc1
 ```
 
-### 0.6 maturin（构建 DORA Python 包）
+### 0.5 maturin（构建 DORA Python 包）
 
 ```bash
 cargo install maturin
 maturin --version
 ```
 
-### 0.7 Linux 额外依赖
+### 0.6 Linux 额外依赖
 
 ```bash
 # USB 设备监控 (usb-resolver crate)
@@ -279,9 +267,9 @@ datasets/
 | 症状 | 解决 |
 |---|---|
 | `command not found: cargo` | 执行 §0.2 |
-| `command not found: uv` | 执行 §0.4 |
-| `command not found: dora` | 执行 §0.5 |
-| `command not found: maturin` | 执行 §0.6 |
+| `command not found: uv` | 执行 §0.3 |
+| `command not found: dora` | 执行 §0.4 |
+| `command not found: maturin` | 执行 §0.5 |
 | `dora-node-api v1.0.0-rc1` 编译失败 | dora 源码未克隆 → §1 |
 | `no matching USB device` | 重跑 `usb_scan`，更新 config |
 | `FileExistsError: datasets` | `rm -rf datasets/` |
@@ -290,7 +278,7 @@ datasets/
 | `ModuleNotFoundError: cv2` / `numpy` | `uv pip install opencv-python numpy` |
 | Web 页面不更新 | 先启动终端 1 再启动终端 2 |
 | 摄像头索引交换 | 交换 `record.yml` 中 `TR_CAMERA_ID` 的 0/1 |
-| Linux 编译 `usb-resolver` 失败 | `sudo apt install libudev-dev` (§0.7) |
+| Linux 编译 `usb-resolver` 失败 | `sudo apt install libudev-dev` (§0.6) |
 
 ---
 
