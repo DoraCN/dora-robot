@@ -403,6 +403,15 @@ build_project() {
 
 register_services() {
     log "注册 launchd 服务..."
+
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local REAL_HOME
+    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
+        REAL_HOME=$(eval echo "~$REAL_USER")
+    else
+        REAL_HOME="$HOME"
+    fi
+
     mkdir -p "$PROJECT/logs"
     local venv="$PROJECT/training/.venv"
 
@@ -434,7 +443,7 @@ register_services() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${venv}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>VIRTUAL_ENV</key>
         <string>${venv}</string>
     </dict>
@@ -472,7 +481,7 @@ EOF
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${venv}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>VIRTUAL_ENV</key>
         <string>${venv}</string>
     </dict>

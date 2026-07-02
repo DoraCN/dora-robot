@@ -437,6 +437,14 @@ build_project() {
 register_services() {
     log "注册 systemd 服务..."
 
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local REAL_HOME
+    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
+        REAL_HOME=$(eval echo "~$REAL_USER")
+    else
+        REAL_HOME="$HOME"
+    fi
+
     mkdir -p "$PROJECT/logs"
     local venv="$PROJECT/training/.venv"
 
@@ -452,7 +460,7 @@ WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
 RestartSec=5
-Environment="PATH=${venv}/bin:/usr/bin:/bin"
+Environment="PATH=${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=${venv}"
 StandardOutput=append:$PROJECT/logs/follower.log
 StandardError=append:$PROJECT/logs/follower.log
@@ -475,7 +483,7 @@ WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
 RestartSec=5
-Environment="PATH=${venv}/bin:/usr/bin:/bin"
+Environment="PATH=${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=${venv}"
 StandardOutput=append:$PROJECT/logs/leader.log
 StandardError=append:$PROJECT/logs/leader.log
