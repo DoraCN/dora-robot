@@ -84,7 +84,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("── leader-daemon ──");
     println!("  Web: http://localhost:8080");
-    println!("  keyboard: o/x/s/f/r/q");
+    println!("  keyboard: o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
     println!("────────────────────");
 
     loop {

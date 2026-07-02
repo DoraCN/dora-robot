@@ -120,8 +120,8 @@ h1{font-size:20px;margin-bottom:4px}
   </div>
 
   <div class="btn-row">
-    <button class="btn btn-on" id="btn-torque-on" onclick="cmd('TorqueOn')">⚡ 上力</button>
-    <button class="btn btn-off" id="btn-torque-off" onclick="cmd('TorqueOff')" disabled>⏻ 卸力</button>
+    <button class="btn btn-on" id="btn-torque-on" onclick="cmd('TorqueOn')">⚡ 使能</button>
+    <button class="btn btn-off" id="btn-torque-off" onclick="cmd('TorqueOff')" disabled>⏻ 失能</button>
   </div>
 
   <div class="btn-row" style="border-top:1px solid #334155;padding-top:8px;margin-top:4px">
@@ -147,7 +147,7 @@ evt.onmessage = function(e) {
   try {
     const s = JSON.parse(e.data);
     document.getElementById('state').textContent = stateLabel(s.state);
-    document.getElementById('torque').textContent = s.torque_on ? 'ON' : 'OFF';
+    document.getElementById('torque').textContent = s.torque_on ? '已使能' : '已失能';
     document.getElementById('rec').textContent = s.recording ? '● 采集中' : '--';
     document.getElementById('ep').textContent = s.episode || '--';
     document.getElementById('frames').textContent = s.frame_count || 0;
