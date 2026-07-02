@@ -97,8 +97,27 @@ check_deps() {
 }
 
 # ──────────────────────────────────────────────
-# 2. 扫描 USB 串口设备
+# 1b. Linux 系统依赖（编译 usb-resolver 等需要）
 # ──────────────────────────────────────────────
+
+install_system_deps() {
+    log "检查系统依赖..."
+    local missing=""
+
+    # 检查并安装缺失的包
+    for pkg in pkg-config libudev-dev; do
+        if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+            missing="$missing $pkg"
+        fi
+    done
+
+    if [ -n "$missing" ]; then
+        warn "安装系统依赖: $missing"
+        apt-get update -qq
+        apt-get install -y -qq $missing || warn "安装 $missing 失败，编译可能报错"
+        log "系统依赖安装完成"
+    fi
+}
 
 scan_usb_devices() {
     log "扫描 USB 串口设备..."
@@ -516,6 +535,7 @@ main() {
 
     # ── 第二步：全自动安装（无需人工干预）──────
     check_deps
+    install_system_deps
     generate_configs
     if [ "$NEED_DORA" = true ]; then
         install_venv

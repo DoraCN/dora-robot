@@ -4,19 +4,20 @@ use tr_daemon::config::DaemonConfig;
 use tr_daemon::dora::DoraFlow;
 use tr_daemon::retry::Backoff;
 use tr_daemon::state::{ArmState, DataflowAction, Fsm};
-use tr_messages::control::{ControlCommand, DaemonStatus};
 use tr_messages::Codec;
-use tr_so101::config::So101Config;
-use tr_so101::resolver::{parse_hex_u16, resolve_arm_port, UsbDeviceConfig};
-use tr_so101::{FeetechBus, MotorBus, So101Arm, So101Follower};
+use tr_messages::control::{ControlCommand, DaemonStatus};
 use tr_robot::RobotDriver;
+use tr_so101::config::So101Config;
+use tr_so101::resolver::{UsbDeviceConfig, parse_hex_u16, resolve_arm_port};
+use tr_so101::{FeetechBus, MotorBus, So101Arm, So101Follower};
 use tr_transport::Transport;
 use tr_transport_zenoh::ZenohTransport;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let config_path = args
-        .iter().position(|a| a == "--config")
+        .iter()
+        .position(|a| a == "--config")
         .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str())
         .unwrap_or("config/follower.toml");
@@ -32,7 +33,9 @@ fn main() -> anyhow::Result<()> {
         pid: parse_hex_u16(&config.arm.so101.pid)?,
         serial: config.arm.so101.serial.clone(),
     };
-    let cli_port = args.iter().position(|a| a == "--port")
+    let cli_port = args
+        .iter()
+        .position(|a| a == "--port")
         .and_then(|i| args.get(i + 1).cloned());
     let port = match cli_port {
         Some(p) => p,
@@ -43,7 +46,10 @@ fn main() -> anyhow::Result<()> {
     let ids_arr = ids_to_array(&config.arm.so101.ids);
 
     let rt_zenoh = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4).enable_io().enable_time().build()?;
+        .worker_threads(4)
+        .enable_io()
+        .enable_time()
+        .build()?;
 
     let k_status = format!("tr/{id}/status");
     let mut t_st = ZenohTransport::publisher(rt_zenoh.handle(), &k_status)?;
@@ -56,7 +62,10 @@ fn main() -> anyhow::Result<()> {
     loop {
         let (mut follower, rt_arm, mut t_ctrl, mut t_cmd, mut t_obs) =
             match connect_arm(&port, &config, &id, &ids_arr, &rt_zenoh) {
-                Ok(t) => { backoff.reset(); t }
+                Ok(t) => {
+                    backoff.reset();
+                    t
+                }
                 Err(e) => {
                     eprintln!("[follower] arm error: {e}");
                     pub_offline_status(&mut t_st, &mut last_status);
@@ -76,7 +85,14 @@ fn main() -> anyhow::Result<()> {
                     if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                         eprintln!("[follower] cmd={:?}", cmd);
                         let (_, action) = fsm.apply(&cmd);
-                        handle_dataflow_action(&mut dora, &config, &rt_arm, &mut follower, &ids_arr, action);
+                        handle_dataflow_action(
+                            &mut dora,
+                            &config,
+                            &rt_arm,
+                            &mut follower,
+                            &ids_arr,
+                            action,
+                        );
                     }
                 }
                 Ok(None) => {}
@@ -108,9 +124,8 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            let obs_res = rt_arm.block_on(async {
-                follower.arm_mut().read_joints().await.map(|a| a.to_vec())
-            });
+            let obs_res = rt_arm
+                .block_on(async { follower.arm_mut().read_joints().await.map(|a| a.to_vec()) });
             match obs_res {
                 Ok(obs) => {
                     if let Ok(b) = codec.encode_observation(&obs) {
@@ -176,7 +191,10 @@ fn connect_arm(
     rt_zenoh: &tokio::runtime::Runtime,
 ) -> anyhow::Result<ArmHandle> {
     let rt_arm = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().enable_time().build()?;
+        .worker_threads(1)
+        .enable_io()
+        .enable_time()
+        .build()?;
 
     let _guard = rt_arm.enter();
     let mut bus = FeetechBus::new(port, config.arm.so101.baud)?;
@@ -187,8 +205,8 @@ fn connect_arm(
     drop(_guard);
 
     let t_ctrl = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/control"))?;
-    let t_cmd  = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/command"))?;
-    let t_obs  = ZenohTransport::publisher(rt_zenoh.handle(), &format!("tr/{id}/observation"))?;
+    let t_cmd = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/command"))?;
+    let t_obs = ZenohTransport::publisher(rt_zenoh.handle(), &format!("tr/{id}/observation"))?;
 
     Ok((follower, rt_arm, t_ctrl, t_cmd, t_obs))
 }
@@ -197,27 +215,44 @@ fn handle_dataflow_action(
     dora: &mut Option<DoraFlow>,
     config: &DaemonConfig,
     rt_arm: &tokio::runtime::Runtime,
-    follower: &mut So101Follower<feetech_servo_sdk::driver::FeetechController<tokio_serial::SerialStream>>,
+    follower: &mut So101Follower<
+        feetech_servo_sdk::driver::FeetechController<tokio_serial::SerialStream>,
+    >,
     ids_arr: &[u8; 6],
     action: DataflowAction,
 ) {
     match action {
         DataflowAction::Launch => {
             if dora.is_none() {
-                match DoraFlow::launch(config) { Ok(df) => *dora = Some(df), Err(e) => eprintln!("[follower] DORA: {e}") }
+                match DoraFlow::launch(config) {
+                    Ok(df) => *dora = Some(df),
+                    Err(e) => eprintln!("[follower] DORA: {e}"),
+                }
             }
-            rt_arm.block_on(async { follower.bus_mut().enable_torque(ids_arr).await }).ok();
+            rt_arm
+                .block_on(async { follower.bus_mut().enable_torque(ids_arr).await })
+                .ok();
         }
         DataflowAction::Stop => {
-            if let Some(df) = dora.take() { let _ = df.stop(); }
-            rt_arm.block_on(async { follower.bus_mut().disable_torque(ids_arr).await }).ok();
+            if let Some(df) = dora.take() {
+                let _ = df.stop();
+            }
+            rt_arm
+                .block_on(async { follower.bus_mut().disable_torque(ids_arr).await })
+                .ok();
         }
         DataflowAction::None => {}
     }
 }
 
-fn handle_recovery(t_st: &mut ZenohTransport, last_status: &mut Instant, dora: &mut Option<DoraFlow>) {
-    if let Some(df) = dora.take() { let _ = df.stop(); }
+fn handle_recovery(
+    t_st: &mut ZenohTransport,
+    last_status: &mut Instant,
+    dora: &mut Option<DoraFlow>,
+) {
+    if let Some(df) = dora.take() {
+        let _ = df.stop();
+    }
     pub_offline_status(t_st, last_status);
 }
 
@@ -239,6 +274,8 @@ fn pub_offline_status(t_st: &mut ZenohTransport, last_status: &mut Instant) {
 
 fn ids_to_array(ids: &[u8]) -> [u8; 6] {
     let mut arr = [1u8; 6];
-    for (i, &id) in ids.iter().take(6).enumerate() { arr[i] = id; }
+    for (i, &id) in ids.iter().take(6).enumerate() {
+        arr[i] = id;
+    }
     arr
 }
