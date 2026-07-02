@@ -10,6 +10,8 @@ nodes:
 
   - id: camera_front
     path: ../training/tr_lerobot/camera_node.py
+    inputs:
+      tick: dora/timer/millis/33
     outputs:
       - image
     env:
@@ -20,6 +22,8 @@ nodes:
 
   - id: camera_wrist
     path: ../training/tr_lerobot/camera_node.py
+    inputs:
+      tick: dora/timer/millis/33
     outputs:
       - image
     env:
