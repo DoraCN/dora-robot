@@ -314,6 +314,15 @@ EOF
 
 install_venv() {
     log "安装 Python 虚拟环境..."
+
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local REAL_HOME
+    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
+        REAL_HOME=$(eval echo "~$REAL_USER")
+    else
+        REAL_HOME="$HOME"
+    fi
+    local CARGO_BIN="$REAL_HOME/.cargo/bin/cargo"
     local VENV="$PROJECT/training/.venv"
     local VENV_PYTHON="$VENV/bin/python"
 
