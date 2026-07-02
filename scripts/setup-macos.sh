@@ -597,8 +597,14 @@ main() {
     if [ "$NEED_LEADER" = true ]; then
     echo "  ║  Web 控制台: http://localhost:8080       ║"
     fi
-    echo "  ║  查看日志:   tail -f logs/follower.log   ║"
-    echo "  ║  停止服务:   sudo launchctl stop ...      ║"
+    if [ "$NEED_FOLLOWER" = true ]; then
+    echo "  ║  查看从臂日志: tail -f logs/follower.log           ║"
+    echo "  ║  停止从臂服务: sudo launchctl stop com.dorarobot.follower  ║"
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+    echo "  ║  查看主臂日志: tail -f logs/leader.log            ║"
+    echo "  ║  停止主臂服务: sudo launchctl stop com.dorarobot.leader   ║"
+    fi
     echo "  ╚══════════════════════════════════════════╝"
 }
 

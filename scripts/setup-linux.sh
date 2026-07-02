@@ -605,8 +605,14 @@ main() {
     if [ "$NEED_LEADER" = true ]; then
     echo "  ║  Web 控制台: http://<本机IP>:8080        ║"
     fi
-    echo "  ║  查看日志:   journalctl -u dorarobot-* -f║"
-    echo "  ║  停止服务:   systemctl stop dorarobot-*   ║"
+    if [ "$NEED_FOLLOWER" = true ]; then
+    echo "  ║  查看从臂日志: journalctl -u dorarobot-follower -f   ║"
+    echo "  ║  停止从臂服务: systemctl stop dorarobot-follower     ║"
+    fi
+    if [ "$NEED_LEADER" = true ]; then
+    echo "  ║  查看主臂日志: journalctl -u dorarobot-leader -f    ║"
+    echo "  ║  停止主臂服务: systemctl stop dorarobot-leader      ║"
+    fi
     echo "  ╚══════════════════════════════════════════╝"
 }
 
