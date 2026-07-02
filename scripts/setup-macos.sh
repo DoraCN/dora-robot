@@ -64,15 +64,19 @@ check_deps() {
         warn "dora CLI 未安装，从源码编译安装..."
         if [ ! -d "$PROJECT/dora" ]; then
             warn "dora 源码不存在，正在自动克隆..."
-            git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
+            sudo -u "$REAL_USER" git clone --branch v1.0.0-rc1 https://github.com/dora-rs/dora.git "$PROJECT/dora" || {
+                warn "git clone --branch 失败，尝试完整克隆..."
+                sudo -u "$REAL_USER" git clone https://github.com/dora-rs/dora.git "$PROJECT/dora"
+            }
         fi
         cd "$PROJECT/dora"
         if ! git describe --tags --exact-match 2>/dev/null | grep -q "v1.0.0-rc1"; then
             warn "切换到 v1.0.0-rc1..."
-            git fetch --tags && git checkout v1.0.0-rc1 || warn "git checkout 失败，继续编译（可能版本不匹配）"
+            git fetch --tags 2>/dev/null || true
+            git checkout v1.0.0-rc1 2>/dev/null || warn "git checkout 失败，继续编译（可能版本不匹配）"
         fi
         cd "$PROJECT"
-        sudo -u "$REAL_USER" cargo build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
+        sudo -u "$REAL_USER" "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
         mkdir -p "$REAL_HOME/.local/bin"
         cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
         chown "$REAL_USER" "$REAL_HOME/.local/bin/dora" 2>/dev/null || true
@@ -249,9 +253,19 @@ EOF
 
 build_project() {
     log "编译项目（首次约 10-20 分钟）..."
+
+    local REAL_USER="${SUDO_USER:-$USER}"
+    local REAL_HOME
+    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
+        REAL_HOME=$(eval echo "~$REAL_USER")
+    else
+        REAL_HOME="$HOME"
+    fi
+    local CARGO="$REAL_HOME/.cargo/bin/cargo"
+
     cd "$PROJECT"
-    cargo build --release || err "编译失败"
-    cargo build -p tr-capture --release || err "tr-capture 编译失败"
+    sudo -u "$REAL_USER" "$CARGO" build --release || err "编译失败"
+    sudo -u "$REAL_USER" "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
 
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
