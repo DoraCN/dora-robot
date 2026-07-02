@@ -6,3 +6,4 @@
 pub mod config;
 pub mod dora;
 pub mod state;
+pub mod web;
