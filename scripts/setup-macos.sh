@@ -458,6 +458,7 @@ main() {
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
+    # ── 第一步：全部交互式问题 ──
     echo "  请选择部署角色："
     echo "    [1] 主臂 (Leader)       — 主臂驱动 + Web 控制台"
     echo "    [2] 从臂 (Follower)     — 从臂驱动 + DORA 录制"
@@ -473,7 +474,6 @@ main() {
         esac
     done
 
-    check_deps
     scan_usb_devices
 
     if [ "$NEED_LEADER" = true ] && [ "$NEED_FOLLOWER" = true ]; then
@@ -484,23 +484,33 @@ main() {
         select_single_arm "从臂 (Follower)"
     fi
 
-    generate_configs
-
     echo ""
-    read -rp "  现在编译项目? [Y/n]: " do_build
-    if [ "$do_build" != "n" ] && [ "$do_build" != "N" ]; then
-        build_project
+    echo "  ╔══════════════════════════════════════════╗"
+    echo "  ║   配置已确认，即将开始全自动安装        ║"
+    echo "  ║   预计耗时 10-30 分钟（取决于网络）     ║"
+    echo "  ╚══════════════════════════════════════════╝"
+    echo ""
+    read -rp "  开始自动化安装? [Y/n]: " do_start
+    if [ "$do_start" = "n" ] || [ "$do_start" = "N" ]; then
+        log "已取消"
+        exit 0
     fi
 
+    # ── 第二步：全自动安装 ──
+    check_deps
+    generate_configs
+    build_project
     register_services
     start_services
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   部署完成！                               ║"
+    echo "  ║   部署完成！                            ║"
     echo "  ╠══════════════════════════════════════════╣"
-    echo "  ║  Web 控制台: http://localhost:8080        ║"
-    echo "  ║  查看日志:   tail -f logs/follower.log    ║"
+    if [ "$NEED_LEADER" = true ]; then
+    echo "  ║  Web 控制台: http://localhost:8080       ║"
+    fi
+    echo "  ║  查看日志:   tail -f logs/follower.log   ║"
     echo "  ║  停止服务:   sudo launchctl stop ...      ║"
     echo "  ╚══════════════════════════════════════════╝"
 }
