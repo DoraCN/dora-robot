@@ -20,6 +20,7 @@ import os
 
 import cv2
 import numpy as np
+import pyarrow as pa
 
 
 def _env(name: str, default: str) -> str:
@@ -59,7 +60,7 @@ def main() -> None:
             continue
 
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        data = frame_rgb.flatten().astype(np.uint8)
+        data = pa.array(frame_rgb.ravel())
 
         node.send_output(
             "image",
