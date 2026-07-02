@@ -248,7 +248,7 @@ generate_configs() {
 # 由 setup-macos.sh 自动生成 ($(date '+%Y-%m-%d %H:%M'))
 
 [arm]
-id = "arm_1"
+id = "$ARM_ID"
 type = "so101"
 
 [arm.so101]
@@ -267,7 +267,7 @@ EOF
 # 由 setup-macos.sh 自动生成 ($(date '+%Y-%m-%d %H:%M'))
 
 [arm]
-id = "arm_1"
+id = "$ARM_ID"
 type = "so101"
 
 [arm.so101]
@@ -475,6 +475,13 @@ main() {
     done
 
     scan_usb_devices
+
+    # 机械臂 ID
+    echo ""
+    read -rp "  机械臂 ID (默认: 1): " ARM_NUM
+    ARM_NUM="${ARM_NUM:-1}"
+    ARM_ID="arm_${ARM_NUM}"
+    log "机械臂 ID: $ARM_ID"
 
     if [ "$NEED_LEADER" = true ] && [ "$NEED_FOLLOWER" = true ]; then
         select_arms
