@@ -97,7 +97,7 @@ sudo apt install libudev-dev
 git clone https://github.com/DoraCN/dora-robot.git
 cd dora-robot
 
-# DORA 1.0-rc1 源码（gitignored，需手动克隆）
+# DORA 1.0-rc1 源码（gitignored，需手动克隆并切到正确 tag）
 git clone https://github.com/dora-rs/dora.git
 cd dora && git checkout v1.0.0-rc1 && cd ..
 ```

@@ -26,8 +26,34 @@ function Check-Deps {
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         Write-Err "uv 未安装。irm https://astral.sh/uv/install.ps1 | iex"
     }
+
+    # DORA CLI — 如果未安装，从本地源码编译安装
     if (-not (Get-Command dora -ErrorAction SilentlyContinue)) {
-        Write-Err "dora CLI 未安装"
+        Write-Warn "dora CLI 未安装，从本地 dora\ 源码编译安装..."
+        if (-not (Test-Path "$PROJECT\dora")) {
+            Write-Err "dora 源码目录不存在。请先：git clone https://github.com/dora-rs/dora.git && cd dora && git checkout v1.0.0-rc1 && cd .."
+        }
+        Push-Location "$PROJECT\dora"
+        try {
+            $tag = git describe --tags --exact-match 2>$null
+            if ($tag -ne "v1.0.0-rc1") {
+                Write-Warn "dora 源码不在 v1.0.0-rc1，正在切换..."
+                git fetch --tags 2>$null
+                git checkout v1.0.0-rc1 2>$null
+            }
+        } catch {
+            Write-Warn "git checkout 失败，继续编译（可能版本不匹配）"
+        }
+        Pop-Location
+        cargo build -p dora-cli --release
+        if ($LASTEXITCODE -ne 0) { Write-Err "dora 编译失败" }
+        $binDir = "$env:LOCALAPPDATA\dora"
+        New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+        Copy-Item "target\release\dora.exe" "$binDir\dora.exe"
+        $env:Path = "$binDir;$env:Path"
+        [Environment]::SetEnvironmentVariable("Path", "$binDir;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
+        Pop-Location
+        Write-Log "dora CLI 已安装到 $binDir\"
     }
     Write-Log "依赖检查通过"
 }

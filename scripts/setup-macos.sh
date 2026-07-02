@@ -22,8 +22,28 @@ check_deps() {
     log "检查前置依赖..."
     command -v cargo  >/dev/null || err "Rust 未安装。curl https://sh.rustup.rs -sSf | sh"
     command -v uv     >/dev/null || err "uv 未安装。curl -LsSf https://astral.sh/uv/install.sh | sh"
-    command -v dora   >/dev/null || err "dora CLI 未安装"
     command -v python3 >/dev/null || warn "python3 未安装"
+
+    # DORA CLI — 如果未安装，从本地源码编译安装
+    if ! command -v dora >/dev/null; then
+        warn "dora CLI 未安装，从本地 dora/ 源码编译安装..."
+        if [ ! -d "$PROJECT/dora" ]; then
+            err "dora 源码目录不存在。请先：git clone https://github.com/dora-rs/dora.git && cd dora && git checkout v1.0.0-rc1 && cd .."
+        fi
+        cd "$PROJECT/dora"
+        if ! git describe --tags --exact-match 2>/dev/null | grep -q "v1.0.0-rc1"; then
+            warn "dora 源码不在 v1.0.0-rc1 tag，正在切换..."
+            git fetch --tags && git checkout v1.0.0-rc1 || warn "git checkout 失败，继续编译（可能版本不匹配）"
+        fi
+        cd "$PROJECT"
+        cd "$PROJECT/dora"
+        cargo build -p dora-cli --release || err "dora 编译失败"
+        mkdir -p ~/.local/bin
+        cp target/release/dora ~/.local/bin/dora
+        export PATH="$HOME/.local/bin:$PATH"
+        log "dora CLI 已安装到 ~/.local/bin/dora"
+        cd "$PROJECT"
+    fi
     log "依赖检查通过"
 }
 
