@@ -31,7 +31,7 @@ check_deps() {
     log "检查前置依赖..."
     command -v cargo  >/dev/null || err "Rust 未安装。curl https://sh.rustup.rs -sSf | sh"
     command -v uv     >/dev/null || err "uv 未安装。curl -LsSf https://astral.sh/uv/install.sh | sh"
-    command -v python3 >/dev/null || warn "python3 未安装"
+    # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
     # DORA CLI — 如果未安装，从本地源码编译安装
     if ! command -v dora >/dev/null; then
