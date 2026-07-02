@@ -76,8 +76,8 @@ check_deps() {
             git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
     fi
 
-    # lerobot 源码 — 训练/推理需要
-    if [ ! -d "$PROJECT/lerobot" ]; then
+    # lerobot 源码 — 从臂录制/训练需要
+    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/lerobot" ]; then
         warn "lerobot 源码不存在，正在自动克隆..."
         sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
             git clone https://github.com/huggingface/lerobot.git "$PROJECT/lerobot" || warn "克隆 lerobot 失败（可后续手动克隆）"
