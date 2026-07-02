@@ -55,21 +55,27 @@ class LerobotEpisodeWriter:
     ) -> None:
         from lerobot.datasets import LeRobotDataset  # noqa: PLC0415
 
-        self._dataset = LeRobotDataset.create(
-            repo_id=repo_id,
-            fps=spec.fps,
-            root=root,
-            robot_type=robot_type,
-            features=spec.features(),
-            use_videos=use_videos,
-            # create() defaults streaming_encoding=False; the CLI defaults it True
-            # (docs/recording-video-encoding-performance.md §1).
-            streaming_encoding=streaming_encoding,
-            encoder_threads=encoder_threads,
-            encoder_queue_maxsize=encoder_queue,
-            batch_encoding_size=batch_encoding,
-            # NOTE: HW codec → rgb_encoder=RGBEncoderConfig(vcodec=...).
-        )
+        # ── Date-based archive: create if new, load if exists ──
+        dataset_root = f"{root}/{repo_id}"
+        try:
+            self._dataset = LeRobotDataset.create(
+                repo_id=repo_id,
+                fps=spec.fps,
+                root=root,
+                robot_type=robot_type,
+                features=spec.features(),
+                use_videos=use_videos,
+                streaming_encoding=streaming_encoding,
+                encoder_threads=encoder_threads,
+                encoder_queue_maxsize=encoder_queue,
+                batch_encoding_size=batch_encoding,
+            )
+        except FileExistsError:
+            from pathlib import Path
+            self._dataset = LeRobotDataset(
+                repo_id=repo_id,
+                root=root,
+            )
 
     def add_frame(self, frame: dict) -> None:
         self._dataset.add_frame(frame)

@@ -39,7 +39,10 @@ impl DoraFlow {
     /// Launch the recording dataflow via `dora up && dora start`.
     pub fn launch(config: &DaemonConfig) -> anyhow::Result<Self> {
         let id = &config.arm.id;
-        let _ = id;
+
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let root = format!("../datasets/{}", today);
+        let task = "teleop";
 
         // dora up (ignore errors if already running)
         let _ = with_venv_path(&mut Command::new("dora"))
@@ -48,6 +51,8 @@ impl DoraFlow {
 
         let child = with_venv_path(&mut Command::new("dora"))
             .args(["start", "dataflows/record.yml", "--name", &format!("record-{}", id)])
+            .env("LEROBOT_ROOT", &root)
+            .env("LEROBOT_TASK", task)
             .spawn()
             .map_err(|e| anyhow::anyhow!("failed to launch dora dataflow: {}", e))?;
 
