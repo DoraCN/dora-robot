@@ -4,16 +4,16 @@
 //! SSE endpoint for real-time status and POSTs commands.
 
 use axum::{
+    Json, Router,
     extract::State,
     response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
-    Json, Router,
 };
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Shared state between HTTP handlers and the daemon main loop.
 pub struct WebState {
@@ -42,8 +42,7 @@ pub fn router(state: Arc<WebState>) -> Router {
 
 /// Serve the self-contained HTML page (arm info injected from config).
 async fn index_html(State(state): State<Arc<WebState>>) -> axum::response::Html<String> {
-    let html = HTML_PAGE
-        .replace("ARM_INFO_PLACEHOLDER", &state.arm_info);
+    let html = HTML_PAGE.replace("ARM_INFO_PLACEHOLDER", &state.arm_info);
     axum::response::Html(html)
 }
 
@@ -52,11 +51,9 @@ async fn sse_status(
     State(state): State<Arc<WebState>>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let rx = state.status_tx.subscribe();
-    let stream = BroadcastStream::new(rx).filter_map(|msg| {
-        match msg {
-            Ok(json) => Some(Ok(Event::default().data(json))),
-            Err(_) => None,
-        }
+    let stream = BroadcastStream::new(rx).filter_map(|msg| match msg {
+        Ok(json) => Some(Ok(Event::default().data(json))),
+        Err(_) => None,
     });
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
@@ -112,7 +109,7 @@ h1{font-size:20px;margin-bottom:4px}
 </head>
 <body>
 <div class="c">
-  <h1>SO-101 遥操作控制台</h1>
+  <h1>DOROBOT 遥操作控制台</h1>
   <div class="st"><span id="led" class="online"></span> <span id="arm_id">ARM_INFO_PLACEHOLDER</span></div>
 
   <div class="status-bar">
