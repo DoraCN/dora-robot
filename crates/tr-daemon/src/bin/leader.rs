@@ -64,7 +64,8 @@ fn main() -> anyhow::Result<()> {
     // ── Web server setup ────────────────────────────────────
     let (status_tx, _) = tokio::sync::broadcast::channel::<String>(8);
     let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let web_state = Arc::new(WebState { status_tx, cmd_tx });
+    let arm_info = format!("{} (id={}, type={})", config.arm.id, config.arm.id, config.arm.arm_type);
+    let web_state = Arc::new(WebState { status_tx, cmd_tx, arm_info });
     let app = web::router(web_state.clone());
     let web_rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1).enable_io().enable_time().build()?;

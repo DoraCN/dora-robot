@@ -21,6 +21,8 @@ pub struct WebState {
     pub status_tx: broadcast::Sender<String>,
     /// Channel to send commands TO the daemon main loop.
     pub cmd_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    /// Arm display info from config.
+    pub arm_info: String,
 }
 
 /// Command request body.
@@ -38,9 +40,11 @@ pub fn router(state: Arc<WebState>) -> Router {
         .with_state(state)
 }
 
-/// Serve the self-contained HTML page.
-async fn index_html() -> axum::response::Html<&'static str> {
-    axum::response::Html(HTML_PAGE)
+/// Serve the self-contained HTML page (arm info injected from config).
+async fn index_html(State(state): State<Arc<WebState>>) -> axum::response::Html<String> {
+    let html = HTML_PAGE
+        .replace("ARM_INFO_PLACEHOLDER", &state.arm_info);
+    axum::response::Html(html)
 }
 
 /// SSE endpoint — streams the latest follower status (1 Hz).
@@ -108,8 +112,8 @@ h1{font-size:20px;margin-bottom:4px}
 </head>
 <body>
 <div class="c">
-  <h1>SO-101 Teleop Console</h1>
-  <div class="st"><span id="led" class="online"></span> <span id="arm_id">arm_1</span></div>
+  <h1>SO-101 遥操作控制台</h1>
+  <div class="st"><span id="led" class="online"></span> <span id="arm_id">ARM_INFO_PLACEHOLDER</span></div>
 
   <div class="status-bar">
     <div class="status-item"><span class="l">状态</span><br><span class="v" id="state">--</span></div>
