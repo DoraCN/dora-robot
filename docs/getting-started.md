@@ -48,7 +48,7 @@ uv --version
 
 ```bash
 # macOS / Linux
-curl -L "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc1/<文件名>" -o /tmp/dora.tar.gz
+curl -L "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc.1/<文件名>" -o /tmp/dora.tar.gz
 tar -xzf /tmp/dora.tar.gz -C /tmp
 mkdir -p ~/.local/bin
 cp /tmp/dora ~/.local/bin/dora
@@ -59,7 +59,7 @@ source ~/.bashrc
 
 ```powershell
 # Windows (PowerShell 管理员)
-$url = "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc1/dora-cli-x86_64-pc-windows-msvc.zip"
+$url = "https://github.com/dora-rs/dora/releases/download/v1.0.0-rc.1/dora-cli-x86_64-pc-windows-msvc.zip"
 Invoke-WebRequest $url -OutFile $env:TEMP\dora.zip
 Expand-Archive $env:TEMP\dora.zip -DestinationPath $env:LOCALAPPDATA\dora
 [Environment]::SetEnvironmentVariable("Path", "$env:LOCALAPPDATA\dora;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
@@ -99,7 +99,7 @@ cd dora-robot
 
 # DORA 1.0-rc1 源码（gitignored，需手动克隆并切到正确 tag）
 git clone https://github.com/dora-rs/dora.git
-cd dora && git checkout v1.0.0-rc1 && cd ..
+cd dora && git checkout v1.0.0-rc.1 && cd ..
 ```
 
 ---
@@ -276,10 +276,10 @@ datasets/
 | `command not found: uv` | 执行 §0.3 |
 | `command not found: dora` | 执行 §0.4 |
 | `command not found: maturin` | 执行 §0.5 |
-| `dora-node-api v1.0.0-rc1` 编译失败 | dora 源码未克隆 → §1 |
+| `dora-node-api v1.0.0-rc.1` 编译失败 | dora 源码未克隆 → §1 |
 | `no matching USB device` | 重跑 `usb_scan`，更新 config |
 | `FileExistsError: datasets` | `rm -rf datasets/` |
-| DORA `version mismatch` | `cd dora && git checkout v1.0.0-rc1` |
+| DORA `version mismatch` | `cd dora && git checkout v1.0.0-rc.1` |
 | `ModuleNotFoundError: dora` | 重做 §2 maturin 部分 |
 | `ModuleNotFoundError: cv2` / `numpy` | `uv pip install opencv-python numpy` |
 | Web 页面不更新 | 先启动终端 1 再启动终端 2 |

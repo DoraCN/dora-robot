@@ -51,10 +51,9 @@ function Check-Deps {
         Push-Location "$PROJECT\dora"
         try {
             $tag = git describe --tags --exact-match 2>$null
-            if ($tag -ne "v1.0.0-rc1") {
-                Write-Warn "切换到 v1.0.0-rc1..."
-                git fetch --tags 2>$null
-                git checkout v1.0.0-rc1 2>$null
+            if ($tag -ne "v1.0.0-rc.1") {
+                Write-Warn "切换到 v1.0.0-rc.1..."
+                git checkout v1.0.0-rc.1 2>$null
             }
         } catch {
             Write-Warn "git checkout 失败，继续编译（可能版本不匹配）"

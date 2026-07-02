@@ -84,8 +84,8 @@ check_deps() {
         fi
         cd "$PROJECT/dora"
         git fetch --tags 2>/dev/null || true
-        if ! git checkout v1.0.0-rc1 2>/dev/null; then
-            warn "tag v1.0.0-rc1 不存在，使用默认分支..."
+        if ! git checkout v1.0.0-rc.1 2>/dev/null; then
+            warn "tag v1.0.0-rc.1 不存在，使用默认分支..."
         fi
         cd "$PROJECT"
         sudo -u "$REAL_USER" env $PROXY_ENV \
