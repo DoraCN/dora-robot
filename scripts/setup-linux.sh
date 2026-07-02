@@ -506,13 +506,6 @@ main() {
 
     scan_usb_devices
 
-    # 机械臂 ID
-    echo ""
-    read -rp "  机械臂 ID (默认: 1): " ARM_NUM
-    ARM_NUM="${ARM_NUM:-1}"
-    ARM_ID="arm_${ARM_NUM}"
-    log "机械臂 ID: $ARM_ID"
-
     if [ "$NEED_LEADER" = true ] && [ "$NEED_FOLLOWER" = true ]; then
         select_arms
     elif [ "$NEED_LEADER" = true ]; then
@@ -520,6 +513,13 @@ main() {
     else
         select_single_arm "从臂 (Follower)"
     fi
+
+    # 机械臂 ID
+    echo ""
+    read -rp "  机械臂 ID (默认: 1): " ARM_NUM
+    ARM_NUM="${ARM_NUM:-1}"
+    ARM_ID="arm_${ARM_NUM}"
+    log "机械臂 ID: $ARM_ID"
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"
