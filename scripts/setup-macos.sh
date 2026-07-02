@@ -448,6 +448,8 @@ register_services() {
     </array>
     <key>WorkingDirectory</key>
     <string>$PROJECT</string>
+    <key>UserName</key>
+    <string>$REAL_USER</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -486,6 +488,8 @@ EOF
     </array>
     <key>WorkingDirectory</key>
     <string>$PROJECT</string>
+    <key>UserName</key>
+    <string>$REAL_USER</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
