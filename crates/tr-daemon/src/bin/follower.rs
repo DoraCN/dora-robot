@@ -4,7 +4,7 @@ use tr_daemon::config::DaemonConfig;
 use tr_daemon::dora::DoraFlow;
 use tr_daemon::retry::Backoff;
 use tr_daemon::state::{ArmState, DataflowAction, Fsm};
-use tr_messages::Codec;
+use tr_messages::{Codec, CommandBody, TeleopCommand};
 use tr_messages::control::{ControlCommand, DaemonStatus};
 use tr_robot::RobotDriver;
 use tr_so101::config::So101Config;
@@ -74,71 +74,119 @@ fn main() -> anyhow::Result<()> {
                 }
             };
 
+        const CTRL_DT: Duration = Duration::from_millis(25);   // 40Hz
+        const DEDUP_THRESH: f32 = 0.002;                       // rad
+
         let mut fsm = Fsm::new();
         let mut dora: Option<DoraFlow> = None;
         let mut frames: u64 = 0;
-        eprintln!("[follower] state=IDLE");
+        let mut latest_cmd: Option<TeleopCommand> = None;
+        let mut last_written = [0.0_f32; 6];
+        let mut tick_count: u64 = 0;
+        eprintln!("[follower] state=IDLE  ctrl=40Hz");
 
         'inner: loop {
-            match t_cmd.recv(Duration::from_millis(5)) {
-                Ok(Some(inbound)) => {
-                    if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
-                        eprintln!("[follower] cmd={:?}", cmd);
-                        let (_, action) = fsm.apply(&cmd);
-                        handle_dataflow_action(
-                            &mut dora,
-                            &config,
-                            &rt_arm,
-                            &mut follower,
-                            &ids_arr,
-                            action,
-                        );
+            let tick_start = Instant::now();
+
+            // ── ① FSM commands (non-blocking drain) ──────────
+            loop {
+                match t_cmd.recv(Duration::ZERO) {
+                    Ok(Some(inbound)) => {
+                        if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
+                            eprintln!("[follower] cmd={:?}", cmd);
+                            let (_, action) = fsm.apply(&cmd);
+                            handle_dataflow_action(
+                                &mut dora,
+                                &config,
+                                &rt_arm,
+                                &mut follower,
+                                &ids_arr,
+                                action,
+                            );
+                        }
                     }
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    eprintln!("[follower] cmd err, recovery: {e}");
-                    handle_recovery(&mut t_st, &mut last_status, &mut dora);
-                    break 'inner;
+                    Ok(None) => break,
+                    Err(e) => {
+                        eprintln!("[follower] cmd err, recovery: {e}");
+                        handle_recovery(&mut t_st, &mut last_status, &mut dora);
+                        break 'inner;
+                    }
                 }
             }
 
-            match t_ctrl.recv(Duration::from_millis(5)) {
-                Ok(Some(inbound)) => {
-                    if fsm.current() != ArmState::Idle {
+            // ── ② Joint commands (non-blocking drain, keep latest) ─
+            loop {
+                match t_ctrl.recv(Duration::ZERO) {
+                    Ok(Some(inbound)) => {
                         if let Ok(cmd) = codec.decode_command(&inbound.frame) {
-                            if follower.command(&cmd).is_err() {
-                                eprintln!("[follower] bus write error, recovery");
+                            latest_cmd = Some(cmd);
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        eprintln!("[follower] ctrl err, recovery: {e}");
+                        handle_recovery(&mut t_st, &mut last_status, &mut dora);
+                        break 'inner;
+                    }
+                }
+            }
+
+            // ── ③ Write at 40Hz (torque on + latest cmd + dedup) ─
+            if fsm.current() != ArmState::Idle {
+                if let Some(cmd) = &latest_cmd {
+                    let do_write = {
+                        let mut skip = true;
+                        if let CommandBody::Joint(jt) = &cmd.body {
+                            let p = &jt.positions;
+                            if p.len() >= 6 {
+                                let max_d = p[..6].iter()
+                                    .zip(last_written.iter())
+                                    .map(|(a, b)| (*a as f32 - *b).abs())
+                                    .fold(0.0_f32, f32::max);
+                                skip = max_d < DEDUP_THRESH;
+                            }
+                        }
+                        !skip
+                    };
+                    if do_write {
+                        match follower.command(cmd) {
+                            Ok(()) => {
+                                if let CommandBody::Joint(jt) = &cmd.body {
+                                    for i in 0..6 {
+                                        last_written[i] = jt.positions[i] as f32;
+                                    }
+                                }
+                                frames += 1;
+                            }
+                            Err(e) => {
+                                eprintln!("[follower] bus write error, recovery: {e:?}");
                                 handle_recovery(&mut t_st, &mut last_status, &mut dora);
                                 break 'inner;
                             }
-                            frames += 1;
                         }
                     }
                 }
-                Ok(None) => {}
-                Err(e) => {
-                    eprintln!("[follower] ctrl err, recovery: {e}");
-                    handle_recovery(&mut t_st, &mut last_status, &mut dora);
-                    break 'inner;
-                }
             }
 
-            let obs_res = rt_arm
-                .block_on(async { follower.arm_mut().read_joints().await.map(|a| a.to_vec()) });
-            match obs_res {
-                Ok(obs) => {
-                    if let Ok(b) = codec.encode_observation(&obs) {
-                        let _ = t_obs.send(tr_transport::qos::Channel::Control, &b);
+            // ── ④ Read at 20Hz (every other tick, after write) ─
+            if tick_count % 2 == 0 {
+                match rt_arm.block_on(
+                    async { follower.arm_mut().read_joints().await.map(|a| a.to_vec()) },
+                ) {
+                    Ok(obs) => {
+                        if let Ok(b) = codec.encode_observation(&obs) {
+                            let _ = t_obs.send(tr_transport::qos::Channel::Control, &b);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[follower] bus read error, recovery: {e}");
+                        handle_recovery(&mut t_st, &mut last_status, &mut dora);
+                        break 'inner;
                     }
                 }
-                Err(e) => {
-                    eprintln!("[follower] bus read error, recovery: {e}");
-                    handle_recovery(&mut t_st, &mut last_status, &mut dora);
-                    break 'inner;
-                }
             }
 
+            // ── DORA alive check ──────────────────────────────
             if let Some(ref d) = dora {
                 if !d.alive() {
                     eprintln!("[follower] DORA crashed, recovery");
@@ -149,6 +197,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
+            // ── Status publish (1Hz) ──────────────────────────
             if last_status.elapsed() >= Duration::from_secs(1) {
                 last_status = Instant::now();
                 let state_str = match fsm.current() {
@@ -170,7 +219,12 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            std::thread::sleep(Duration::from_micros(500));
+            // ── ⑤ Maintain precise 25ms period ────────────────
+            let elapsed = tick_start.elapsed();
+            if elapsed < CTRL_DT {
+                std::thread::sleep(CTRL_DT - elapsed);
+            }
+            tick_count += 1;
         }
     }
 }
