@@ -137,7 +137,7 @@ stop_and_unregister_services() {
                 if powershell -Command "Get-ScheduledTask -TaskName '$tn' -ErrorAction SilentlyContinue" 2>/dev/null | grep -q "$tn"; then
                     log "删除计划任务: $tn"
                     powershell -Command "Stop-ScheduledTask -TaskName '$tn' -ErrorAction SilentlyContinue" 2>/dev/null || true
-                    powershell -Command "Unregister-ScheduledTask -TaskName '$tn' -Confirm:`$false -ErrorAction SilentlyContinue" 2>/dev/null || true
+                    powershell -Command "Unregister-ScheduledTask -TaskName '$tn' -Confirm:\`\$false -ErrorAction SilentlyContinue" 2>/dev/null || true
                     info "已移除"
                 fi
             done
