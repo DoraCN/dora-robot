@@ -19,7 +19,13 @@ cargo build --release -p tr-daemon
 
 # 3. 部署到 bin/
 mkdir -p "$PROJECT/bin"
-cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
+if cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower" 2>/dev/null; then
+    :  # 复制成功
+else
+    log "普通用户权限不足，尝试 sudo cp..."
+    sudo cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
+    sudo chown "$(whoami)" "$PROJECT/bin/follower"
+fi
 
 # 4. 重启服务
 case "$(uname -s)" in
