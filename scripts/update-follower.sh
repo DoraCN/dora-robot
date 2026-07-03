@@ -17,7 +17,16 @@ git pull
 log "cargo build --release -p tr-daemon..."
 cargo build --release -p tr-daemon
 
-# 3. 部署到 bin/
+# 3. 先停止服务（避免 Text file busy），再部署到 bin/
+case "$(uname -s)" in
+    Linux)
+        systemctl --user stop dorarobot-follower 2>/dev/null || true
+        ;;
+    Darwin)
+        launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
+        ;;
+esac
+
 mkdir -p "$PROJECT/bin"
 if cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower" 2>/dev/null; then
     :  # 复制成功
