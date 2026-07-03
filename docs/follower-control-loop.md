@@ -1,6 +1,6 @@
 # Follower Control Loop — 从臂控制循环设计
 
-> 解决 STS3215 伺服电机在遥操作中卡顿的终极方案：固定速率控制循环 + 去重 + 读写分离。
+> 解决 STS3215 伺服电机在遥操作中卡顿的方案：M1 已验证的消息驱动 + 25ms 限速 + 0.002 rad 去重 + 读写分离。
 
 ---
 
@@ -68,102 +68,119 @@ M1 已通过 45Hz→25ms 限速验证了这一阈值。
 2. **读写分离**：写入不等待读取完成
 3. **多级平滑**：速度限制 → 加速度限制 → 死区去重 → 低通滤波
 
-## 4. 终极解决方案
+## 4. 终极方案分析（已废弃 — 保留作为反面教材）
 
-### 4.1 架构图
+### 4.1 第一版尝试：固定速率控制循环
+
+最初尝试了商业系统的**固定速率控制循环**模式：
 
 ```
-                 ┌─────────────────────────────────┐
- Leader ─zenoh─→ │       Fixed-Rate Control Loop    │
-                 │           40Hz (25ms)            │
-                 │                                 │
-                 │  ① Drain FSM commands (ZERO)    │
-                 │  ② Drain joint cmds, keep latest │
-                 │  ③ Dedup (< 0.002 rad → skip)   │
-                 │  ④ follower.command() → USB     │
-                 │  ⑤ read_joints @ 20Hz (隔次)    │
-                 │  ⑥ sleep 精确到 25ms 边界        │
-                 └─────────────────────────────────┘
-                              │
-                              ▼
-                         STS3215 × 6
-                        (1kHz 内部 PID)
+25ms 时钟节拍
+    ├─ 排空消息，只保留最新一条
+    ├─ 写入 follower.command()（含 slew_clamp 3°/tick）
+    ├─ 读取关节 @ 20Hz
+    └─ sleep 至 25ms 边界
 ```
 
-### 4.2 核心机制
+### 4.2 失败原因
+
+该方案在测试中暴露了两个致命问题：
+
+1. **丢弃中间位置**：25ms 内排空 2-3 条消息 → 只保留最新一条。Leader 100Hz 的轨迹在 follower 侧只剩 40Hz 的稀疏采样，从臂永远看不到完整的运动路径。
+2. **slew_clamp 阻止追赶**：每 tick 最多移 3°，但 leader 在 25ms 内可能已移 6°。误差只增不减（3° → 6° → 9°...），从臂永远追不上主臂。
+
+**教训**：遥操作场景要求「每条位置指令都必须被执行」，不能丢弃中间帧。固定速率采样适用于传感器融合（如 IMU 1000Hz → 控制 100Hz），但不适用于位置追踪控制。
+
+## 5. 最终方案：M1 已验证的消息驱动 + 25ms 限速
+
+### 5.1 架构图
+
+```
+  Leader zenoh pub ──→  msg1  ──→  Follower recv
+  (100Hz, 10ms)           │          (5ms timeout)
+                          │              │
+                     msg2 │       ┌──────┘
+                          │       │
+                     msg3 ▼       ▼
+                          ┌──────────────┐
+                          │  Decode       │
+                          │  + Dedup      │ ← 与上次写入 < 0.002 rad → continue
+                          │  + 限速       │ ← 距上次写入 < 25ms → sleep 补足
+                          │  + write_joints│ ← 绕过 slew_clamp，直接 sync_write_goals
+                          └──────────────┘
+                               │
+                               ▼
+                          STS3215 × 6
+                         (1kHz 内部 PID)
+```
+
+**核心原则**：每条消息都处理（dedup 通过即写入），不丢弃任何位置。25ms 限速只是延时写入，而非跳过写入。
+
+### 5.2 核心机制
 
 ```rust
-'inner: loop {
-    let tick_start = Instant::now();
+const MIN_WRITE_DT: Duration = Duration::from_millis(25);
+const DEDUP_THRESH: f32 = 0.002;
 
+let mut first_write = true;
+let mut last_write = Instant::now();
+let mut last_written = [0.0_f32; 6];
+
+'inner: loop {
     // ① FSM 命令（非阻塞排空）
     loop { match t_cmd.recv(Duration::ZERO) { ... } }
 
-    // ② Joint 命令（非阻塞排空，只保留最新）
-    loop { match t_ctrl.recv(Duration::ZERO) { ... } }
-
-    // ③ 写入：40Hz + 去重
-    if torque_on && latest_cmd.exists() {
-        let max_delta = compute_max_delta(latest, last_written);
-        if max_delta >= 0.002 {
-            follower.command(&latest_cmd)?;  // 内含 slew_clamp
-            update_last_written();
+    // ② 一条 joint 命令（阻塞 5ms 等待）
+    match t_ctrl.recv(Duration::from_millis(5)) {
+        Ok(Some(inbound)) => {
+            // 去重
+            if !first_write {
+                let max_d = compute_max_delta(positions, last_written);
+                if max_d < DEDUP_THRESH { continue; }
+            }
+            // 限速（不足 25ms 则 sleep 补足）
+            if !first_write {
+                let elapsed = last_write.elapsed();
+                if elapsed < MIN_WRITE_DT {
+                    std::thread::sleep(MIN_WRITE_DT - elapsed);
+                }
+            }
+            // 写入（绕过 slew_clamp → arm.write_joints）
+            let ok = rt_arm.block_on(async {
+                follower.arm_mut().write_joints(&target).await.is_ok()
+            });
         }
     }
 
-    // ④ 读取：20Hz（隔次），写入之后
-    if tick_count % 2 == 0 {
-        read_joints() → publish observation
-    }
+    // ③ 读取关节 @ ~12Hz（每 ~3 个 loop）
+    read_counter += 1;
+    if read_counter >= 3 { read_joints(); }
 
-    // ⑤ 精确维持 25ms 周期
-    let elapsed = tick_start.elapsed();
-    if elapsed < CTRL_DT {
-        std::thread::sleep(CTRL_DT - elapsed);
-    }
-    tick_count += 1;
+    // DORA 存活检查、状态发布 @ 1Hz
+    std::thread::sleep(Duration::from_micros(500));
 }
 ```
 
-### 4.3 关键参数
+### 5.3 关键参数
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `CTRL_DT` | 25ms | 控制循环周期，对应 40Hz 固定速率 |
+| `MIN_WRITE_DT` | 25ms | 写入间隔下限，对应最大 40Hz 写入频率 |
 | `DEDUP_THRESH` | 0.002 rad | 关节位置变化死区，减少无效写入 |
-| `slew_rad` | 0.05236 rad (3°) | 每 tick 最大关节位移，约 120°/s @ 40Hz |
-| 读取频率 | 20Hz | 每隔一次循环读关节，写入后执行 |
+| 读取频率 | ~12Hz | 每 3 个 loop 读一次，写入后执行 |
+| 写入方式 | `arm.write_joints()` | 绕过 `So101Follower::command()` 的 slew_clamp |
 
-### 4.4 多级平滑链
+### 5.4 为什么 M1 方案能工作
 
-```
-Leader raw (100Hz)
-    │
-    ▼ ① Jitter Buffer（丢弃中间帧，只保留最新）
-Latest command
-    │
-    ▼ ② Dead-zone Dedup（< 0.002 rad → skip）
-    │
-    ▼ ③ Slew Clamp（max 0.05236 rad/tick = 120°/s）
-    │
-    ▼ ④ 固定 25ms 时钟节拍
-    │
-    ▼ 写入 STS3215
-```
+| 特性 | M1 方案 | 固定速率方案（失败） |
+|------|---------|---------------------|
+| 消息处理 | 每条消息逐一处理 | 排空只保留最新 |
+| 写入触发 | 消息到达 → dedup → 限速 → 写入 | 固定节拍采样 |
+| 限速效果 | 延时写入，但**不跳过**任何消息 | 丢弃 1-2 条中间消息 |
+| 位置追踪 | 精确复现所有中间位置 | 丢失轨迹，误差累积 |
+| 追赶能力 | 每次写入移多少由**消息决定** | 被 slew_clamp 限制 |
 
-每一级都是可叠加的、确定性的，形成完整的运动学约束链。
-
-## 5. 与 M1 方案对比
-
-| 维度 | M1（已验证） | 当前方案 |
-|------|------------|---------|
-| 速率限制 | 25ms window | 固定 25ms 时钟节拍 |
-| 去重 | 0.002 rad | 0.002 rad ✓ |
-| 写入时机 | 消息触发 + 限速窗口 | 固定节拍采样最新指令 |
-| 读取关节 | 控制循环中不读 | 20Hz，写入后，隔次读 |
-| 网络抖动 | 无缓冲 | Jitter Buffer（drain → latest） |
-| 运动平滑 | 无 | slew_clamp（防甩臂突跳） |
-| 确定性 | 受消息到达间隔影响 | 完全确定性的 40Hz |
+M1 的 25ms 限速本质上是一个**消息节流阀**：当消息来得太快（< 25ms）时，follower 等待到 25ms 再写入。但**每一条消息最终都被写入**，没有位置信息丢失。follower 完整复现 leader 的运动轨迹，只是以 40Hz 而非 100Hz 的频率步进。
 
 ## 6. 代码结构
 
@@ -173,13 +190,12 @@ crates/tr-daemon/src/bin/follower.rs
 │   ├── 初始化：USB 发现、zenoh 连接、运行时
 │   ├── 外层重试循环（USB/zenoh 断连恢复）
 │   └── 'inner: loop                    ← 控制循环
-│       ├── ① FSM 命令排空（第 92-115 行）
-│       ├── ② Joint 命令排空（第 118-132 行）
-│       ├── ③ Dedup + 写入（第 134-169 行）
-│       ├── ④ 读取关节 @ 20Hz（第 171-187 行）
+│       ├── ① FSM 命令排空（第 91-116 行）
+│       ├── ② Joint 命令 recv + 去重 + 限速 + 写入（第 118-176 行）
+│       ├── ③ 读取关节 @ ~12Hz（第 178-196 行）
 │       ├── DORA 存活检查
 │       ├── 状态发布 @ 1Hz
-│       └── ⑤ 精确 25ms 同步（第 222-227 行）
+│       └── sleep(500µs)
 ├── connect_arm() — USB/zenoh 连接建立
 ├── handle_dataflow_action() — DORA 生命周期管理
 └── handle_recovery() — 错误恢复
@@ -191,17 +207,18 @@ crates/tr-daemon/src/bin/follower.rs
 
 | 检查项 | 方法 | 目标 |
 |--------|------|------|
-| USB 写入频率 | 在 follower.command() 前后打印时间戳 | 应稳定在 ≈25ms |
-| 去重是否生效 | 打印跳过次数 vs 写入次数 | 静止时应几乎全部跳过 |
+| USB 写入频率 | 打印 frames 的 1s 增量 | 最大 ~40Hz（25ms 限速） |
+| 去重是否生效 | 静止时 frames 应不再增长 | 静止时几乎不写入 |
 | Leader 发布频率 | 检查 leader.poll() 耗时 | ≤100Hz |
 | 总线错误率 | 检查 stderr 输出 | 不应有 bus write error |
+| 写入了哪些位置 | 日志对比 leader→follower 位置 | 不应有跳变或累积误差 |
 
 ### 7.2 参数调整
 
 ```rust
-CTRL_DT = 25ms      // 降低 → 更平滑但延迟增加（如 30ms = 33Hz）
-DEDUP_THRESH = 0.002 // 提高 → 更少写入但精度下降
-slew_rad = 0.05236   // 降低 → 更柔和但追尾更明显
+MIN_WRITE_DT = 25ms      // 加大 → 更低频但更平滑（如 33ms = 30Hz）
+DEDUP_THRESH = 0.002     // 加大 → 更少写入但精度下降
+first_write = true        // 重置后下一条消息无条件写入
 ```
 
 ## 8. 参考资料

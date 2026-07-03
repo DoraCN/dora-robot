@@ -4,9 +4,9 @@ use tr_daemon::config::DaemonConfig;
 use tr_daemon::dora::DoraFlow;
 use tr_daemon::retry::Backoff;
 use tr_daemon::state::{ArmState, DataflowAction, Fsm};
-use tr_messages::{Codec, CommandBody, TeleopCommand};
+use tr_messages::{Codec, CommandBody};
 use tr_messages::control::{ControlCommand, DaemonStatus};
-use tr_robot::RobotDriver;
+
 use tr_so101::config::So101Config;
 use tr_so101::resolver::{UsbDeviceConfig, parse_hex_u16, resolve_arm_port};
 use tr_so101::{FeetechBus, MotorBus, So101Arm, So101Follower};
@@ -74,20 +74,20 @@ fn main() -> anyhow::Result<()> {
                 }
             };
 
-        const CTRL_DT: Duration = Duration::from_millis(25);   // 40Hz
-        const DEDUP_THRESH: f32 = 0.002;                       // rad
+        // M1 已验证方案：消息驱动 + 25ms 限速 + 0.002 rad 去重
+        const MIN_WRITE_DT: Duration = Duration::from_millis(25);
+        const DEDUP_THRESH: f32 = 0.002;
 
         let mut fsm = Fsm::new();
         let mut dora: Option<DoraFlow> = None;
         let mut frames: u64 = 0;
-        let mut latest_cmd: Option<TeleopCommand> = None;
+        let mut first_write = true;
+        let mut last_write = Instant::now();
         let mut last_written = [0.0_f32; 6];
-        let mut tick_count: u64 = 0;
-        eprintln!("[follower] state=IDLE  ctrl=40Hz");
+        let mut read_counter: u8 = 0;
+        eprintln!("[follower] state=IDLE  M1-style (25ms+dedup)");
 
         'inner: loop {
-            let tick_start = Instant::now();
-
             // ── ① FSM commands (non-blocking drain) ──────────
             loop {
                 match t_cmd.recv(Duration::ZERO) {
@@ -103,6 +103,7 @@ fn main() -> anyhow::Result<()> {
                                 &ids_arr,
                                 action,
                             );
+                            first_write = true; // reset on torque toggle
                         }
                     }
                     Ok(None) => break,
@@ -114,62 +115,70 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // ── ② Joint commands (non-blocking drain, keep latest) ─
-            loop {
-                match t_ctrl.recv(Duration::ZERO) {
-                    Ok(Some(inbound)) => {
+            // ── ② Joint command (M1: recv one at a time) ────
+            match t_ctrl.recv(Duration::from_millis(5)) {
+                Ok(Some(inbound)) => {
+                    if fsm.current() != ArmState::Idle {
                         if let Ok(cmd) = codec.decode_command(&inbound.frame) {
-                            latest_cmd = Some(cmd);
-                        }
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        eprintln!("[follower] ctrl err, recovery: {e}");
-                        handle_recovery(&mut t_st, &mut last_status, &mut dora);
-                        break 'inner;
-                    }
-                }
-            }
-
-            // ── ③ Write at 40Hz (torque on + latest cmd + dedup) ─
-            if fsm.current() != ArmState::Idle {
-                if let Some(cmd) = &latest_cmd {
-                    let do_write = {
-                        let mut skip = true;
-                        if let CommandBody::Joint(jt) = &cmd.body {
-                            let p = &jt.positions;
-                            if p.len() >= 6 {
-                                let max_d = p[..6].iter()
-                                    .zip(last_written.iter())
-                                    .map(|(a, b)| (*a as f32 - *b).abs())
-                                    .fold(0.0_f32, f32::max);
-                                skip = max_d < DEDUP_THRESH;
-                            }
-                        }
-                        !skip
-                    };
-                    if do_write {
-                        match follower.command(cmd) {
-                            Ok(()) => {
-                                if let CommandBody::Joint(jt) = &cmd.body {
-                                    for i in 0..6 {
-                                        last_written[i] = jt.positions[i] as f32;
-                                    }
+                            let positions: Vec<f32> = match &cmd.body {
+                                CommandBody::Joint(jt) => {
+                                    jt.positions.iter().map(|&p| p as f32).collect()
                                 }
-                                frames += 1;
+                                _ => continue,
+                            };
+                            if positions.len() < 6 {
+                                continue;
                             }
-                            Err(e) => {
-                                eprintln!("[follower] bus write error, recovery: {e:?}");
+
+                            // ── 去重：与上次写入的位置比较 ──
+                            if !first_write {
+                                let max_d = positions.iter().zip(last_written.iter())
+                                    .map(|(a, b)| (a - b).abs())
+                                    .fold(0.0_f32, f32::max);
+                                if max_d < DEDUP_THRESH {
+                                    continue; // 位置几乎没变，跳过写入
+                                }
+                            }
+
+                            // ── 速率限制：距上次写入至少 25ms ──
+                            if !first_write {
+                                let elapsed = last_write.elapsed();
+                                if elapsed < MIN_WRITE_DT {
+                                    std::thread::sleep(MIN_WRITE_DT - elapsed);
+                                }
+                            }
+
+                            // ── 写入（绕过 slew_clamp，与 M1 一致） ──
+                            let mut target = [0.0_f32; 6];
+                            target.copy_from_slice(&positions[..6]);
+                            let ok = rt_arm.block_on(async {
+                                follower.arm_mut().write_joints(&target).await.is_ok()
+                            });
+                            if ok {
+                                last_write = Instant::now();
+                                last_written = target;
+                                first_write = false;
+                                frames += 1;
+                            } else {
+                                eprintln!("[follower] bus write error, recovery");
                                 handle_recovery(&mut t_st, &mut last_status, &mut dora);
                                 break 'inner;
                             }
                         }
                     }
                 }
+                Ok(None) => {} // timeout, no message
+                Err(e) => {
+                    eprintln!("[follower] ctrl err, recovery: {e}");
+                    handle_recovery(&mut t_st, &mut last_status, &mut dora);
+                    break 'inner;
+                }
             }
 
-            // ── ④ Read at 20Hz (every other tick, after write) ─
-            if tick_count % 2 == 0 {
+            // ── ③ Read at low rate (~12Hz, every ~3 loops) ───
+            read_counter += 1;
+            if read_counter >= 3 {
+                read_counter = 0;
                 match rt_arm.block_on(
                     async { follower.arm_mut().read_joints().await.map(|a| a.to_vec()) },
                 ) {
@@ -219,12 +228,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // ── ⑤ Maintain precise 25ms period ────────────────
-            let elapsed = tick_start.elapsed();
-            if elapsed < CTRL_DT {
-                std::thread::sleep(CTRL_DT - elapsed);
-            }
-            tick_count += 1;
+            std::thread::sleep(Duration::from_micros(500));
         }
     }
 }
