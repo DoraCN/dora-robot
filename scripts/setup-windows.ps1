@@ -41,7 +41,7 @@ function Check-Deps {
     # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
 
     # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
-    if (-not (Get-Command dora -ErrorAction SilentlyContinue)) {
+    if ($script:NEED_DORA -and -not (Get-Command dora -ErrorAction SilentlyContinue)) {
         Write-Warn "dora CLI 未安装，从源码编译安装..."
         if (-not (Test-Path "$PROJECT\thirdparty\dora")) {
             Write-Warn "dora 子模块未初始化，正在拉取..."
@@ -184,16 +184,23 @@ port = 8080
 function Build-Project {
     Write-Log "编译项目（首次约 10-20 分钟）..."
     Push-Location $PROJECT
-    cargo build --release
-    if ($LASTEXITCODE -ne 0) { Write-Err "编译失败" }
-    cargo build -p tr-capture --release
-    if ($LASTEXITCODE -ne 0) { Write-Err "tr-capture 编译失败" }
+    if ($script:NEED_DORA) {
+        cargo build --release
+        if ($LASTEXITCODE -ne 0) { Write-Err "编译失败（从臂模式）" }
+        cargo build -p tr-capture --release
+        if ($LASTEXITCODE -ne 0) { Write-Err "tr-capture 编译失败" }
+    } else {
+        cargo build --workspace --exclude tr-capture --release
+        if ($LASTEXITCODE -ne 0) { Write-Err "编译失败（主臂模式）" }
+    }
 
     Write-Log "部署二进制到 bin\..."
     New-Item -ItemType Directory -Force -Path "$PROJECT\bin" | Out-Null
     Copy-Item "$PROJECT\target\release\follower.exe"   "$PROJECT\bin\follower.exe"
     Copy-Item "$PROJECT\target\release\leader.exe"     "$PROJECT\bin\leader.exe"
-    Copy-Item "$PROJECT\target\release\tr-capture.exe" "$PROJECT\bin\tr-capture.exe"
+    if ($script:NEED_DORA) {
+        Copy-Item "$PROJECT\target\release\tr-capture.exe" "$PROJECT\bin\tr-capture.exe"
+    }
     Pop-Location
     Write-Log "编译完成 → $PROJECT\bin\"
 }
@@ -278,6 +285,9 @@ function Main {
     # ── 第一步：全部交互式问题 ──
     $role = Read-Host "  部署角色 [1]主臂 [2]从臂 [3]全部 (1/2/3)"
     if ($role -notin @("1","2","3")) { Write-Err "无效选择" }
+    $script:NEED_DORA = ($role -in @("2","3"))
+    $script:NEED_FOLLOWER = ($role -in @("2","3"))
+    $script:NEED_LEADER = ($role -in @("1","3"))
 
     Scan-USBDevices
     Select-Arms

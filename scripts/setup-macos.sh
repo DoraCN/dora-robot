@@ -37,7 +37,7 @@ check_deps() {
         log "uv 已安装"
     fi
 
-    if [ ! -d "$PROJECT/thirdparty/dora" ]; then
+    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/dora" ]; then
         warn "dora 子模块未初始化，正在拉取..."
         cd "$PROJECT" && git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
         cd - > /dev/null
@@ -280,9 +280,11 @@ build_project() {
         sudo launchctl unload "/Library/LaunchDaemons/${svc}.plist" 2>/dev/null || true
     done
 
-    "$CARGO" build --release || err "编译失败"
     if [ "$NEED_DORA" = true ]; then
+        "$CARGO" build --release || err "编译失败（从臂模式）"
         "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+    else
+        "$CARGO" build --workspace --exclude tr-capture --release || err "编译失败（主臂模式）"
     fi
 
     log "部署二进制到 bin/..."
