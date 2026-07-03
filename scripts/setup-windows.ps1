@@ -230,12 +230,12 @@ bin\leader.exe --config config\leader.toml >> logs\leader.log 2>&1
 "@ | Out-File -FilePath "$PROJECT\scripts\start-leader.bat" -Encoding ASCII
 
     $action = New-ScheduledTaskAction -Execute "$PROJECT\scripts\start-follower.bat"
-    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $trigger = New-ScheduledTaskTrigger -AtLogon
     $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
-    Register-ScheduledTask -TaskName "DoraRobot Follower" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+    Register-ScheduledTask -TaskName "DoraRobot Follower" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 
     $action = New-ScheduledTaskAction -Execute "$PROJECT\scripts\start-leader.bat"
-    Register-ScheduledTask -TaskName "DoraRobot Leader" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+    Register-ScheduledTask -TaskName "DoraRobot Leader" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 
     Write-Log "任务计划程序已注册并设为开机自启"
 }
@@ -266,8 +266,8 @@ function Start-Services {
 # ──────────────────────────────────────────────
 
 function Main {
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Err "请以管理员身份运行 PowerShell 后执行此脚本"
+    if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Warn "检测到管理员身份运行，建议以普通用户身份运行"
     }
 
     Write-Host ""

@@ -51,13 +51,13 @@ See [docs/getting-started.md](docs/getting-started.md) for the complete from-scr
 
 ```bash
 # Linux
-sudo ./scripts/setup-linux.sh
+./scripts/setup-linux.sh         # 以普通用户运行，需要提权时会提示输入密码
 
 # macOS
-sudo ./scripts/setup-macos.sh
+./scripts/setup-macos.sh         # 以普通用户运行
 
-# Windows (PowerShell as Administrator)
-.\scripts\setup-windows.ps1
+# Windows
+.\scripts\setup-windows.ps1      # 以普通用户运行 PowerShell
 ```
 
 The setup script will:

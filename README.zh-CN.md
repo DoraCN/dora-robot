@@ -51,13 +51,13 @@
 
 ```bash
 # Linux
-sudo ./scripts/setup-linux.sh
+./scripts/setup-linux.sh         # 普通用户运行，需要提权时自动提示输入密码
 
 # macOS
-sudo ./scripts/setup-macos.sh
+./scripts/setup-macos.sh         # 普通用户运行，无需 sudo
 
-# Windows（PowerShell 管理员）
-.\scripts\setup-windows.ps1
+# Windows
+.\scripts\setup-windows.ps1      # 普通用户运行 PowerShell 即可
 ```
 
 脚本自动完成：

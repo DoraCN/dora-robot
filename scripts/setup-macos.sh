@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # setup-macos.sh — DoraRobot 一键部署脚本 (macOS)
 #
+# 以普通用户身份运行。需要提权时自动使用 sudo（仅清理旧系统级服务）。
+#
 # 使用：
-#   chmod +x scripts/setup-macos.sh
-#   sudo ./scripts/setup-macos.sh
+#   bash scripts/setup-macos.sh
 
 set -eo pipefail
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,129 +15,81 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
-# 代理环境变量（sudo 默认清除，需保留到子进程）
-PROXY_ENV_CMD=""
-ALL_PROXY_VARS="https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY"
-
-# 先导出到当前 shell（避免 sudo 非法参数）
-for var in $ALL_PROXY_VARS; do
-    val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
-    [ -n "$val" ] && export "${var}=${val}" || true
-done
-
-# 构建正确的 env 命令字符串
-for var in $ALL_PROXY_VARS; do
-    val="$(eval echo "\${${var}:-}" 2>/dev/null || true)"
-    [ -n "$val" ] && PROXY_ENV_CMD="${PROXY_ENV_CMD}${PROXY_ENV_CMD:+ }$var=${val}"
-done
-
 # ──────────────────────────────────────────────
-# 1. 前置检查
+# 1. 前置依赖
 # ──────────────────────────────────────────────
 check_deps() {
     log "检查前置依赖..."
 
-    # 如果通过 sudo 运行，以实际用户身份安装 Rust/uv/dora
-    local REAL_USER="${SUDO_USER:-$USER}"
-    local REAL_HOME
-    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
-        REAL_HOME=$(eval echo "~$REAL_USER")
-    else
-        REAL_HOME="$HOME"
-    fi
+    local CARGO_BIN="$HOME/.cargo/bin/cargo"
+    local UV_BIN="$HOME/.local/bin/uv"
+    local DORA_BIN="$HOME/.local/bin/dora"
 
-    local CARGO_BIN="$REAL_HOME/.cargo/bin/cargo"
-    local UV_BIN="$REAL_HOME/.local/bin/uv"
-    local DORA_BIN="$REAL_HOME/.local/bin/dora"
-
-    # Rust
     if [ ! -x "$CARGO_BIN" ]; then
         warn "Rust 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD bash -c "
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        "
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         log "Rust 已安装"
     fi
 
-    # uv
     if [ ! -x "$UV_BIN" ]; then
         warn "uv 未安装，正在自动安装..."
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD bash -c "
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-        "
+        curl -LsSf https://astral.sh/uv/install.sh | sh
         log "uv 已安装"
     fi
 
-    # uv venv --python 3.12 会自动下载所需 Python，无需系统预装
-
-    # DORA 源码 — 编译 workspace 需要的依赖，任意模式下都必须存在
     if [ ! -d "$PROJECT/dora" ]; then
-        warn "dora 源码不存在，正在自动克隆（workspace 依赖需要）..."
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
-            git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
+        warn "dora 源码不存在，正在自动克隆..."
+        git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
     fi
 
-    # lerobot 源码 — 从臂录制/训练需要
     if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/lerobot" ]; then
         warn "lerobot 源码不存在，正在自动克隆..."
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
-            git clone https://github.com/huggingface/lerobot.git "$PROJECT/lerobot" || warn "克隆 lerobot 失败（可后续手动克隆）"
+        git clone https://github.com/huggingface/lerobot.git "$PROJECT/lerobot" || warn "克隆 lerobot 失败"
     fi
 
-    # DORA CLI — 只有从臂需要编译安装（需要 PYO3_PYTHON 指向 Python ≥3.11）
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
-        warn "dora CLI 未安装，从源码编译安装..."
+        warn "dora CLI 未安装，从源码编译..."
         cd "$PROJECT"
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD PYO3_PYTHON="${PYO3_PYTHON:-}" \
-            "$CARGO_BIN" build -p dora-cli --release --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
-        mkdir -p "$REAL_HOME/.local/bin"
-        cp "$PROJECT/dora/target/release/dora" "$REAL_HOME/.local/bin/dora"
-        chown "$REAL_USER" "$REAL_HOME/.local/bin/dora" 2>/dev/null || true
-        export PATH="$REAL_HOME/.local/bin:$PATH"
-        log "dora CLI 已安装到 $REAL_HOME/.local/bin/dora"
+        "$CARGO_BIN" build -p dora-cli --release \
+            --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
+        mkdir -p "$HOME/.local/bin"
+        cp "$PROJECT/dora/target/release/dora" "$HOME/.local/bin/dora"
+        export PATH="$HOME/.local/bin:$PATH"
+        log "dora CLI 已安装到 $HOME/.local/bin/dora"
     fi
     log "依赖检查通过"
 }
 
 # ──────────────────────────────────────────────
-# 0. 预创建 Python 3.12 venv（DORA 编译需要 pyo3 ≥3.11）
+# 2. Python 3.12 venv
 # ──────────────────────────────────────────────
 ensure_python312() {
-    local UV_BIN="$REAL_HOME/.local/bin/uv"
+    local UV_BIN="$HOME/.local/bin/uv"
     local VENV="$PROJECT/training/.venv"
-
     if [ -d "$VENV" ]; then
         log "Python venv 已存在，跳过创建"
     else
-        log "预创建 Python 3.12 虚拟环境（供 DORA 编译使用）..."
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD \
-            "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
+        log "预创建 Python 3.12 虚拟环境..."
+        "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
         log "Python 3.12 venv 已创建 → $VENV"
     fi
     export PYO3_PYTHON="$VENV/bin/python"
 }
 
 # ──────────────────────────────────────────────
-# 2. 扫描 USB 串口设备 (macOS — /dev/cu.usbmodem*)
+# 3. 扫描 USB 设备 (macOS — /dev/cu.usbmodem*)
 # ──────────────────────────────────────────────
-
 scan_usb_devices() {
     log "扫描 USB 串口设备..."
-
     echo ""
     echo "  序号  串口路径                     VID:PID      Serial           描述"
     echo "  ────  ────────────────────────────  ───────────  ────────────────  ──────"
-
     local i=0
     DEVICES=()
-
     for dev in /dev/cu.usbmodem*; do
         [ -e "$dev" ] || continue
         i=$((i + 1))
-
         local vid=""; local pid=""; local serial=""; local desc=""
-
-        # 用 ioreg 查找该设备对应的 USB 信息
         while IFS='|' read -r v p s d; do
             vid="$v"; pid="$p"; serial="$s"; desc="$d"
             break
@@ -149,8 +102,6 @@ scan_usb_devices() {
             found && /"USB Product Name"/  { gsub(/[^=]*= /,""); gsub(/"/,""); desc=$0 }
             found && /^[}]/ { if(vid && pid) printf "%04x|%04x|%s|%s\n",vid,pid,serial,desc; found=0; vid=""; pid=""; serial=""; desc="" }
         ' 2>/dev/null)
-
-        # 回退：用 system_profiler 获取
         if [ -z "$vid" ]; then
             local info
             info=$(system_profiler SPUSBDataType 2>/dev/null | \
@@ -164,43 +115,28 @@ scan_usb_devices() {
                 IFS='|' read -r vid pid serial desc <<< "$info"
             fi
         fi
-
-        # 从设备文件名提取 serial（macOS 设备名格式: cu.usbmodem<SERIAL>）
         if [ "$serial" = "(无)" ] || [ -z "$serial" ]; then
             serial=$(basename "$dev" | sed 's/cu\.usbmodem//')
         fi
-
-        vid="${vid:-????}"
-        pid="${pid:-????}"
-        serial="${serial:-(无)}"
-        desc="${desc:-未知设备}"
-
+        vid="${vid:-????}"; pid="${pid:-????}"
+        serial="${serial:-(无)}"; desc="${desc:-未知设备}"
         DEVICES+=("$dev|$vid|$pid|$serial|$desc")
         printf "  %-4s  %-30s  0x%-8s  %-16s  %s\n" \
             "[$i]" "$dev" "${vid}:${pid}" "$serial" "$desc"
     done
-
     if [ "$i" -eq 0 ]; then
-            err "未发现 USB 串口设备 (/dev/cu.usbmodem*)。请连接机械臂并重试。"
+        err "未发现 USB 串口设备 (/dev/cu.usbmodem*)。请连接机械臂并重试。"
     fi
-
     echo ""
     log "发现 $i 个 USB 串口设备"
 }
 
-# ──────────────────────────────────────────────
-# 3a. 选择单个臂
-# ──────────────────────────────────────────────
-
 select_single_arm() {
     local label="$1"
-    echo ""
-    log "请选择 $label"
+    echo ""; log "请选择 $label"
     while true; do
         read -rp "  序号 [1-${#DEVICES[@]}]: " idx
-        if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DEVICES[@]}" ]; then
-            break
-        fi
+        if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DEVICES[@]}" ]; then break; fi
         warn "无效序号，请重试"
     done
     IFS='|' read -r DEV VID PID SERIAL DESC <<< "${DEVICES[$((idx - 1))]}"
@@ -211,8 +147,7 @@ select_single_arm() {
     if [ "$NEED_FOLLOWER" = true ]; then
         FOLLOWER_DEV="$DEV"; FOLLOWER_VID="$VID"; FOLLOWER_PID="$PID"; FOLLOWER_SERIAL="$SERIAL"
     fi
-    echo ""
-    log "配置确认："
+    echo ""; log "配置确认："
     info "$label: $DEV  (VID=0x$VID PID=0x$PID Serial=$SERIAL)"
     read -rp "  确认? [Y/n]: " confirm
     if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
@@ -220,52 +155,32 @@ select_single_arm() {
     fi
 }
 
-# ──────────────────────────────────────────────
-# 3b. 选择主臂和从臂
-# ──────────────────────────────────────────────
-
 select_arms() {
-    echo ""
-    log "请选择主臂（Leader）和从臂（Follower）"
-
+    echo ""; log "请选择主臂和从臂"
     while true; do
         read -rp "  主臂序号 [1-${#DEVICES[@]}]: " leader_idx
-        if [[ "$leader_idx" =~ ^[0-9]+$ ]] && [ "$leader_idx" -ge 1 ] && [ "$leader_idx" -le "${#DEVICES[@]}" ]; then
-            break
-        fi
+        if [[ "$leader_idx" =~ ^[0-9]+$ ]] && [ "$leader_idx" -ge 1 ] && [ "$leader_idx" -le "${#DEVICES[@]}" ]; then break; fi
         warn "无效序号，请重试"
     done
-
     while true; do
         read -rp "  从臂序号 [1-${#DEVICES[@]}]: " follower_idx
-        if [[ "$follower_idx" =~ ^[0-9]+$ ]] && [ "$follower_idx" -ge 1 ] && [ "$follower_idx" -le "${#DEVICES[@]}" ]; then
-            break
-        fi
+        if [[ "$follower_idx" =~ ^[0-9]+$ ]] && [ "$follower_idx" -ge 1 ] && [ "$follower_idx" -le "${#DEVICES[@]}" ]; then break; fi
         warn "无效序号，请重试"
     done
-
     IFS='|' read -r LEADER_DEV LEADER_VID LEADER_PID LEADER_SERIAL LEADER_DESC <<< "${DEVICES[$((leader_idx - 1))]}"
     IFS='|' read -r FOLLOWER_DEV FOLLOWER_VID FOLLOWER_PID FOLLOWER_SERIAL FOLLOWER_DESC <<< "${DEVICES[$((follower_idx - 1))]}"
-
     LEADER_VID="${LEADER_VID#0x}"; LEADER_PID="${LEADER_PID#0x}"
     FOLLOWER_VID="${FOLLOWER_VID#0x}"; FOLLOWER_PID="${FOLLOWER_PID#0x}"
-
-    echo ""
-    log "配置确认："
+    echo ""; log "配置确认："
     info "主臂: $LEADER_DEV  (VID=0x$LEADER_VID PID=0x$LEADER_PID Serial=$LEADER_SERIAL)"
     info "从臂: $FOLLOWER_DEV  (VID=0x$FOLLOWER_VID PID=0x$FOLLOWER_PID Serial=$FOLLOWER_SERIAL)"
-
     read -rp "  确认? [Y/n]: " confirm
-    if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
-        select_arms
-        return
-    fi
+    if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then select_arms; return; fi
 }
 
 # ──────────────────────────────────────────────
 # 4. 生成配置文件
 # ──────────────────────────────────────────────
-
 generate_configs() {
     log "生成配置文件..."
     mkdir -p "$PROJECT/config"
@@ -311,88 +226,65 @@ port = 8080
 EOF
         info "  $PROJECT/config/leader.toml"
     fi
-
     log "配置文件已生成"
 }
 
 # ──────────────────────────────────────────────
-# 5a. Python 虚拟环境 + 依赖安装（仅从臂）
+# 5. Python 虚拟环境（仅从臂）
 # ──────────────────────────────────────────────
-
 install_venv() {
     log "安装 Python 虚拟环境..."
-
-    local REAL_USER="${SUDO_USER:-$USER}"
-    local REAL_HOME
-    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
-        REAL_HOME=$(eval echo "~$REAL_USER")
-    else
-        REAL_HOME="$HOME"
-    fi
-    local CARGO_BIN="$REAL_HOME/.cargo/bin/cargo"
-    local UV_BIN="$REAL_HOME/.local/bin/uv"
+    local CARGO_BIN="$HOME/.cargo/bin/cargo"
+    local UV_BIN="$HOME/.local/bin/uv"
     local VENV="$PROJECT/training/.venv"
     local VENV_PYTHON="$VENV/bin/python"
 
     if [ ! -d "$VENV" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
+        "$UV_BIN" venv "$VENV" --python 3.12 || err "创建 venv 失败"
     fi
 
     log "安装 Python 依赖 (numpy, opencv, pyarrow, lerobot)..."
-    sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" pip install --python "$VENV_PYTHON" \
+    "$UV_BIN" pip install --python "$VENV_PYTHON" \
         numpy opencv-python pyarrow pyyaml lerobot || err "pip install 失败"
 
     log "构建 DORA Python 包..."
     if ! command -v maturin >/dev/null; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO_BIN" install maturin || warn "maturin 编译失败"
+        "$CARGO_BIN" install maturin || warn "maturin 安装失败"
     fi
-    MATURIN="$REAL_HOME/.cargo/bin/maturin"
-
-    [ -x "$MATURIN" ] && sudo -u "$REAL_USER" env PATH="$REAL_HOME/.cargo/bin:$PATH" $PROXY_ENV_CMD \
+    local MATURIN="$HOME/.cargo/bin/maturin"
+    if [ -x "$MATURIN" ]; then
         PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
-        -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
-
-    local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
-    if [ -n "$wheel" ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$UV_BIN" pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
-        log "DORA Python 包已安装"
+            -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
+        local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
+        if [ -n "$wheel" ]; then
+            "$UV_BIN" pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
+            log "DORA Python 包已安装"
+        fi
     fi
     log "Python 环境安装完成"
 }
 
 # ──────────────────────────────────────────────
-# 5. 编译 + 部署到 bin/
+# 6. 编译项目
 # ──────────────────────────────────────────────
-
 build_project() {
     log "编译项目（首次约 10-20 分钟）..."
-
-    local REAL_USER="${SUDO_USER:-$USER}"
-    local REAL_HOME
-    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
-        REAL_HOME=$(eval echo "~$REAL_USER")
-    else
-        REAL_HOME="$HOME"
-    fi
-    local CARGO="$REAL_HOME/.cargo/bin/cargo"
-
+    local CARGO="$HOME/.cargo/bin/cargo"
     cd "$PROJECT"
-    sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO" build --release || err "编译失败"
+
+    # 先停服务，避免 cp 报 Text file busy
+    for svc in com.dorarobot.follower com.dorarobot.leader; do
+        launchctl unload "$HOME/Library/LaunchAgents/${svc}.plist" 2>/dev/null || true
+        sudo launchctl unload "/Library/LaunchDaemons/${svc}.plist" 2>/dev/null || true
+    done
+
+    "$CARGO" build --release || err "编译失败"
     if [ "$NEED_DORA" = true ]; then
-        sudo -u "$REAL_USER" env $PROXY_ENV_CMD "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
+        "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
     fi
 
     log "部署二进制到 bin/..."
     mkdir -p "$PROJECT/bin"
-
-    # 停止运行中的服务，避免 cp 被占用（Text file busy）
-    if [ "$NEED_FOLLOWER" = true ]; then
-        launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
-    fi
-    if [ "$NEED_LEADER" = true ]; then
-        launchctl unload /Library/LaunchDaemons/com.dorarobot.leader.plist 2>/dev/null || true
-    fi
-
     if [ "$NEED_FOLLOWER" = true ]; then
         cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
     fi
@@ -402,37 +294,27 @@ build_project() {
     if [ "$NEED_DORA" = true ]; then
         cp "$PROJECT/target/release/tr-capture" "$PROJECT/bin/tr-capture"
     fi
-
-    # 重启服务
-    if [ "$NEED_FOLLOWER" = true ]; then
-        launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
-    fi
-    if [ "$NEED_LEADER" = true ]; then
-        launchctl load /Library/LaunchDaemons/com.dorarobot.leader.plist 2>/dev/null || true
-    fi
     log "编译完成 → $PROJECT/bin/"
 }
 
 # ──────────────────────────────────────────────
-# 6. 注册 launchd 服务
+# 7. 注册 launchd user LaunchAgent
 # ──────────────────────────────────────────────
-
 register_services() {
-    log "注册 launchd 服务..."
-
-    local REAL_USER="${SUDO_USER:-$USER}"
-    local REAL_HOME
-    if [ "$REAL_USER" != "root" ] && [ -n "$SUDO_USER" ]; then
-        REAL_HOME=$(eval echo "~$REAL_USER")
-    else
-        REAL_HOME="$HOME"
-    fi
-
-    mkdir -p "$PROJECT/logs"
+    log "注册 launchd user 服务..."
+    mkdir -p "$HOME/Library/LaunchAgents" "$PROJECT/logs"
     local venv="$PROJECT/training/.venv"
 
+    # 清理旧系统级 daemon（如果有）
+    for svc in com.dorarobot.follower com.dorarobot.leader; do
+        if [ -f "/Library/LaunchDaemons/${svc}.plist" ]; then
+            sudo launchctl unload "/Library/LaunchDaemons/${svc}.plist" 2>/dev/null || true
+            sudo rm -f "/Library/LaunchDaemons/${svc}.plist"
+        fi
+    done
+
     if [ "$NEED_FOLLOWER" = true ]; then
-        cat > /Library/LaunchDaemons/com.dorarobot.follower.plist << EOF
+        cat > "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -448,8 +330,6 @@ register_services() {
     </array>
     <key>WorkingDirectory</key>
     <string>$PROJECT</string>
-    <key>UserName</key>
-    <string>$REAL_USER</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -461,18 +341,18 @@ register_services() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>${venv}/bin:${HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>VIRTUAL_ENV</key>
         <string>${venv}</string>
     </dict>
 </dict>
 </plist>
 EOF
-        launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist
+        launchctl load "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist"
     fi
 
     if [ "$NEED_LEADER" = true ]; then
-        cat > /Library/LaunchDaemons/com.dorarobot.leader.plist << EOF
+        cat > "$HOME/Library/LaunchAgents/com.dorarobot.leader.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -488,8 +368,6 @@ EOF
     </array>
     <key>WorkingDirectory</key>
     <string>$PROJECT</string>
-    <key>UserName</key>
-    <string>$REAL_USER</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -501,23 +379,22 @@ EOF
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${venv}/bin:${REAL_HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>${venv}/bin:${HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>VIRTUAL_ENV</key>
         <string>${venv}</string>
     </dict>
 </dict>
 </plist>
 EOF
-        launchctl load /Library/LaunchDaemons/com.dorarobot.leader.plist
+        launchctl load "$HOME/Library/LaunchAgents/com.dorarobot.leader.plist"
     fi
 
-    log "launchd 服务已注册并设为开机自启"
+    log "launchd user 服务已注册"
 }
 
 # ──────────────────────────────────────────────
-# 7. 启动服务
+# 8. 启动服务
 # ──────────────────────────────────────────────
-
 start_services() {
     log "启动服务..."
 
@@ -549,10 +426,9 @@ start_services() {
 # ──────────────────────────────────────────────
 # 入口
 # ──────────────────────────────────────────────
-
 main() {
-    if [ "$(id -u)" -ne 0 ]; then
-        err "请用 sudo 运行此脚本"
+    if [ "$(id -u)" -eq 0 ]; then
+        err "请以普通用户身份运行此脚本（不要用 sudo）"
     fi
 
     echo ""
@@ -561,7 +437,7 @@ main() {
     echo "  ╚══════════════════════════════════════════╝"
     echo ""
 
-    # ── 第一步：全部交互式问题 ──
+    # ── 第一步：交互式问答 ──
     echo "  请选择部署角色："
     echo "    [1] 主臂 (Leader)       — 主臂驱动 + Web 控制台"
     echo "    [2] 从臂 (Follower)     — 从臂驱动 + DORA 录制"
@@ -587,7 +463,6 @@ main() {
         select_single_arm "从臂 (Follower)"
     fi
 
-    # 实例序号（zenoh 通道隔离不同臂对）
     echo ""
     read -rp "  实例序号 (默认: 1): " ARM_NUM
     ARM_NUM="${ARM_NUM:-1}"
@@ -627,12 +502,12 @@ main() {
     echo "  ║  Web 控制台: http://localhost:8080       ║"
     fi
     if [ "$NEED_FOLLOWER" = true ]; then
-    echo "  ║  查看从臂日志: tail -f logs/follower.log           ║"
-    echo "  ║  停止从臂服务: sudo launchctl stop com.dorarobot.follower  ║"
+    echo "  ║  从臂日志: tail -f logs/follower.log               ║"
+    echo "  ║  停止从臂: launchctl stop com.dorarobot.follower    ║"
     fi
     if [ "$NEED_LEADER" = true ]; then
-    echo "  ║  查看主臂日志: tail -f logs/leader.log            ║"
-    echo "  ║  停止主臂服务: sudo launchctl stop com.dorarobot.leader   ║"
+    echo "  ║  主臂日志: tail -f logs/leader.log                 ║"
+    echo "  ║  停止主臂: launchctl stop com.dorarobot.leader      ║"
     fi
     echo "  ╚══════════════════════════════════════════╝"
 }

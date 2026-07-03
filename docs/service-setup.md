@@ -122,18 +122,20 @@ bin/tr-capture
 # 创建日志目录
 mkdir -p $PROJECT/logs
 
-# 加载
-sudo cp com.dorarobot.follower.plist /Library/LaunchDaemons/
-sudo cp com.dorarobot.leader.plist /Library/LaunchDaemons/
-sudo launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist
-sudo launchctl load /Library/LaunchDaemons/com.dorarobot.leader.plist
+# 复制 plist 到用户 LaunchAgents 目录
+cp com.dorarobot.follower.plist ~/Library/LaunchAgents/
+cp com.dorarobot.leader.plist ~/Library/LaunchAgents/
+
+# 加载（无需 sudo）
+launchctl load ~/Library/LaunchAgents/com.dorarobot.follower.plist
+launchctl load ~/Library/LaunchAgents/com.dorarobot.leader.plist
 
 # 立即启动
-sudo launchctl start com.dorarobot.follower
-sudo launchctl start com.dorarobot.leader
+launchctl start com.dorarobot.follower
+launchctl start com.dorarobot.leader
 
 # 查看状态
-sudo launchctl list | grep dorarobot
+launchctl list | grep dorarobot
 
 # 查看日志
 tail -f $PROJECT/logs/follower.log
@@ -144,26 +146,28 @@ tail -f $PROJECT/logs/leader.log
 
 ```bash
 # 停止
-sudo launchctl stop com.dorarobot.follower
-sudo launchctl stop com.dorarobot.leader
+launchctl stop com.dorarobot.follower
+launchctl stop com.dorarobot.leader
 
 # 卸载
-sudo launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist
-sudo launchctl unload /Library/LaunchDaemons/com.dorarobot.leader.plist
+launchctl unload ~/Library/LaunchAgents/com.dorarobot.follower.plist
+launchctl unload ~/Library/LaunchAgents/com.dorarobot.leader.plist
 ```
 
 ---
 
-## 3. Linux — systemd
+## 3. Linux — systemd（user service）
+
+用户级 systemd 服务，无需 sudo，权限与手动运行一致。
 
 ### 3.1 从臂服务
 
-创建 `/etc/systemd/system/dorarobot-follower.service`：
+创建 `~/.config/systemd/user/dorarobot-follower.service`：
 
 ```ini
 [Unit]
 Description=DoraRobot Follower Daemon
-After=network.target
+After=default.target
 
 [Service]
 Type=simple
@@ -171,23 +175,21 @@ WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/follower --config $PROJECT/config/follower.toml
 Restart=always
 RestartSec=5
-Environment="PATH=$PROJECT/training/.venv/bin:/usr/bin:/bin"
+Environment="PATH=$PROJECT/training/.venv/bin:$HOME/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=$PROJECT/training/.venv"
-StandardOutput=append:$PROJECT/logs/follower.log
-StandardError=append:$PROJECT/logs/follower.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 ### 3.2 主臂 + Web 控制台服务
 
-创建 `/etc/systemd/system/dorarobot-leader.service`：
+创建 `~/.config/systemd/user/dorarobot-leader.service`：
 
 ```ini
 [Unit]
 Description=DoraRobot Leader Daemon + Web Console
-After=network.target
+After=default.target
 
 [Service]
 Type=simple
@@ -195,13 +197,11 @@ WorkingDirectory=$PROJECT
 ExecStart=$PROJECT/bin/leader --config $PROJECT/config/leader.toml
 Restart=always
 RestartSec=5
-Environment="PATH=$PROJECT/training/.venv/bin:/usr/bin:/bin"
+Environment="PATH=$PROJECT/training/.venv/bin:$HOME/.local/bin:/usr/bin:/bin"
 Environment="VIRTUAL_ENV=$PROJECT/training/.venv"
-StandardOutput=append:$PROJECT/logs/leader.log
-StandardError=append:$PROJECT/logs/leader.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 ### 3.3 加载服务
@@ -210,31 +210,34 @@ WantedBy=multi-user.target
 # 创建日志目录
 mkdir -p $PROJECT/logs
 
+# 允许用户服务在未登录时运行（只需执行一次）
+sudo loginctl enable-linger $USER
+
 # 加载
-sudo systemctl daemon-reload
-sudo systemctl enable dorarobot-follower
-sudo systemctl enable dorarobot-leader
+systemctl --user daemon-reload
+systemctl --user enable dorarobot-follower
+systemctl --user enable dorarobot-leader
 
 # 启动
-sudo systemctl start dorarobot-follower
-sudo systemctl start dorarobot-leader
+systemctl --user start dorarobot-follower
+systemctl --user start dorarobot-leader
 
 # 查看状态
-sudo systemctl status dorarobot-follower
-sudo systemctl status dorarobot-leader
+systemctl --user status dorarobot-follower
+systemctl --user status dorarobot-leader
 
 # 查看日志
-sudo journalctl -u dorarobot-follower -f
-sudo journalctl -u dorarobot-leader -f
+journalctl --user -u dorarobot-follower -f
+journalctl --user -u dorarobot-leader -f
 ```
 
 ### 3.4 管理命令
 
 ```bash
-sudo systemctl stop dorarobot-follower
-sudo systemctl stop dorarobot-leader
-sudo systemctl restart dorarobot-follower
-sudo systemctl disable dorarobot-follower   # 取消开机自启
+systemctl --user stop dorarobot-follower
+systemctl --user stop dorarobot-leader
+systemctl --user restart dorarobot-follower
+systemctl --user disable dorarobot-follower   # 取消开机自启
 ```
 
 ---
@@ -306,11 +309,11 @@ sudo reboot
 
 # 重启后检查
 # macOS:
-sudo launchctl list | grep dorarobot
+launchctl list | grep dorarobot
 tail -f $PROJECT/logs/follower.log
 
 # Linux:
-sudo systemctl status dorarobot-follower
+systemctl --user status dorarobot-follower
 
 # Windows:
 Get-ScheduledTask -TaskName "DoraRobot*" | Select TaskName, State

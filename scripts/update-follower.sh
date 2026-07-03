@@ -23,18 +23,14 @@ case "$(uname -s)" in
         systemctl --user stop dorarobot-follower 2>/dev/null || true
         ;;
     Darwin)
+        # 优先停 user LaunchAgent，再试旧系统级 LaunchDaemon
+        launchctl unload "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist" 2>/dev/null || true
         launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
         ;;
 esac
 
 mkdir -p "$PROJECT/bin"
-if cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower" 2>/dev/null; then
-    :  # 复制成功
-else
-    log "普通用户权限不足，尝试 sudo cp..."
-    sudo cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
-    sudo chown "$(whoami)" "$PROJECT/bin/follower"
-fi
+cp "$PROJECT/target/release/follower" "$PROJECT/bin/follower"
 
 # 4. 重启服务
 case "$(uname -s)" in
@@ -46,8 +42,13 @@ case "$(uname -s)" in
         ;;
     Darwin)
         log "重启 launchd 服务..."
-        launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
-        launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist
+        if [ -f "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist" ]; then
+            launchctl unload "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist" 2>/dev/null || true
+            launchctl load "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist"
+        elif [ -f /Library/LaunchDaemons/com.dorarobot.follower.plist ]; then
+            sudo launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
+            sudo launchctl load /Library/LaunchDaemons/com.dorarobot.follower.plist
+        fi
         launchctl list com.dorarobot.follower
         ;;
     *)
