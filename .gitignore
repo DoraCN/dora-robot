@@ -21,8 +21,7 @@ __pycache__/
 **/.DS_Store
 
 /logs
-/lerobot
-/dora
+# thirdparty/ is managed by git submodule — NOT gitignored
 crates/tr-daemon/out/
 out/
 dataflows/datasets/

@@ -211,8 +211,8 @@ clean_build_artifacts() {
     local dirs=()
     [ -d "$PROJECT/target" ]          && dirs+=("$PROJECT/target          ($(du -sh "$PROJECT/target" 2>/dev/null | cut -f1))")
     [ -d "$PROJECT/training/.venv" ]  && dirs+=("$PROJECT/training/.venv ($(du -sh "$PROJECT/training/.venv" 2>/dev/null | cut -f1))")
-    [ -d "$PROJECT/dora" ]            && dirs+=("$PROJECT/dora            ($(du -sh "$PROJECT/dora" 2>/dev/null | cut -f1))")
-    [ -d "$PROJECT/lerobot" ]         && dirs+=("$PROJECT/lerobot         ($(du -sh "$PROJECT/lerobot" 2>/dev/null | cut -f1))")
+    [ -d "$PROJECT/thirdparty/dora" ]            && dirs+=("$PROJECT/thirdparty/dora            ($(du -sh "$PROJECT/thirdparty/dora" 2>/dev/null | cut -f1))")
+    [ -d "$PROJECT/thirdparty/lerobot" ]         && dirs+=("$PROJECT/thirdparty/lerobot         ($(du -sh "$PROJECT/thirdparty/lerobot" 2>/dev/null | cut -f1))")
 
     if [ ${#dirs[@]} -eq 0 ]; then
         log "没有构建产物需要清理"

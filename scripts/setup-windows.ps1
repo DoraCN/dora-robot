@@ -43,18 +43,17 @@ function Check-Deps {
     # DORA CLI — 如果未安装，从本地源码编译安装（源码不存在则自动克隆）
     if (-not (Get-Command dora -ErrorAction SilentlyContinue)) {
         Write-Warn "dora CLI 未安装，从源码编译安装..."
-        if (-not (Test-Path "$PROJECT\dora")) {
-            Write-Warn "dora 源码不存在，正在自动克隆..."
-            git clone https://github.com/dora-rs/dora.git "$PROJECT\dora"
-            if ($LASTEXITCODE -ne 0) { Write-Err "克隆 dora 仓库失败" }
+        if (-not (Test-Path "$PROJECT\thirdparty\dora")) {
+            Write-Warn "dora 子模块未初始化，正在拉取..."
+            Set-Location $PROJECT
+            git submodule update --init -- thirdparty/dora
+            if ($LASTEXITCODE -ne 0) { Write-Err "拉取 dora 子模块失败" }
         }
-        Push-Location "$PROJECT\dora"
-        Pop-Location
-        cargo build -p dora-cli --release --manifest-path "$PROJECT\dora\Cargo.toml"
+        cargo build -p dora-cli --release --manifest-path "$PROJECT\thirdparty\dora\Cargo.toml"
         if ($LASTEXITCODE -ne 0) { Write-Err "dora 编译失败" }
         $binDir = "$env:LOCALAPPDATA\dora"
         New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-        Copy-Item "$PROJECT\dora\target\release\dora.exe" "$binDir\dora.exe"
+        Copy-Item "$PROJECT\thirdparty\dora\target\release\dora.exe" "$binDir\dora.exe"
         $env:Path = "$binDir;$env:Path"
         [Environment]::SetEnvironmentVariable("Path", "$binDir;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
         Write-Log "dora CLI 已安装到 $binDir\"

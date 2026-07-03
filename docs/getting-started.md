@@ -94,12 +94,11 @@ sudo apt install libudev-dev
 ## 1. 克隆项目 + 放置 DORA 源码
 
 ```bash
-git clone https://github.com/DoraCN/dora-robot.git
+git clone --recursive https://github.com/DoraCN/dora-robot.git
 cd dora-robot
 
-# DORA 1.0-rc1 源码（gitignored，需手动克隆并切到正确 tag）
-git clone https://github.com/dora-rs/dora.git
-cd dora && git checkout v1.0.0-rc.1 && cd ..
+# 如果已克隆但没有初始化子模块，执行：
+git submodule update --init --recursive
 ```
 
 ---
@@ -290,11 +289,12 @@ datasets/
 
 ## 10. gitignored 清单
 
+依赖通过 git submodule 管理（`thirdparty/dora`, `thirdparty/lerobot`），详见 `.gitmodules`。
+
 | 路径 | 说明 | 获取方式 |
 |---|---|---|
-| `dora/` | DORA 源码 | `git clone` (§1) |
+| `thirdparty/` | 第三方源码 (git submodule) | `git submodule update --init --recursive` |
 | `training/.venv/` | Python venv | `uv venv` (§2) |
 | `datasets/` | 录制数据 | 运行时自动生成 |
 | `target/` | Rust 编译产物 | `cargo build` |
-| `.leon/` | lerobot 参考源码 | 不需要 |
 | `logs/` | 日志 | 运行时生成 |

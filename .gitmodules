@@ -1,0 +1,6 @@
+[submodule "thirdparty/dora"]
+	path = thirdparty/dora
+	url = https://github.com/dora-rs/dora.git
+[submodule "thirdparty/lerobot"]
+	path = thirdparty/lerobot
+	url = https://github.com/huggingface/lerobot.git

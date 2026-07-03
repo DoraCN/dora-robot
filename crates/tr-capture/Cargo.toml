@@ -10,10 +10,10 @@ tr-messages = { workspace = true, features = ["serde"] }
 tr-codec.workspace = true
 tr-transport.workspace = true
 tr-transport-zenoh = { path = "../tr-transport-zenoh" }
-dora-node-api = { path = "../../dora/apis/rust/node", default-features = false }
-dora-arrow-convert = { path = "../../dora/libraries/arrow-convert" }
-dora-message = { path = "../../dora/libraries/message" }
-dora-core = { path = "../../dora/libraries/core", features = ["zenoh"] }
+dora-node-api = { path = "../../thirdparty/dora/apis/rust/node", default-features = false }
+dora-arrow-convert = { path = "../../thirdparty/dora/libraries/arrow-convert" }
+dora-message = { path = "../../thirdparty/dora/libraries/message" }
+dora-core = { path = "../../thirdparty/dora/libraries/core", features = ["zenoh"] }
 arrow = { workspace = true }
 eyre = { workspace = true }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }

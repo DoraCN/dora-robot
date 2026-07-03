@@ -56,23 +56,27 @@ check_deps() {
         log "uv 已安装"
     fi
 
-    if [ ! -d "$PROJECT/dora" ]; then
-        warn "dora 源码不存在，正在自动克隆（workspace 依赖需要）..."
-        git clone https://github.com/dora-rs/dora.git "$PROJECT/dora" || err "克隆 dora 仓库失败"
+    if [ ! -d "$PROJECT/thirdparty/dora" ]; then
+        warn "dora 子模块未初始化，正在拉取..."
+        cd "$PROJECT"
+        git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
+        cd - > /dev/null
     fi
 
-    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/lerobot" ]; then
-        warn "lerobot 源码不存在，正在自动克隆..."
-        git clone https://github.com/huggingface/lerobot.git "$PROJECT/lerobot" || warn "克隆 lerobot 失败（可后续手动克隆）"
+    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/lerobot" ]; then
+        warn "lerobot 子模块未初始化，正在拉取..."
+        cd "$PROJECT"
+        git submodule update --init -- thirdparty/lerobot || warn "拉取 lerobot 子模块失败（可后续手动更新）"
+        cd - > /dev/null
     fi
 
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
         warn "dora CLI 未安装，从源码编译..."
         cd "$PROJECT"
         "$CARGO_BIN" build -p dora-cli --release \
-            --manifest-path "$PROJECT/dora/Cargo.toml" || err "dora 编译失败"
+            --manifest-path "$PROJECT/thirdparty/dora/Cargo.toml" || err "dora 编译失败"
         mkdir -p "$HOME/.local/bin"
-        cp "$PROJECT/dora/target/release/dora" "$HOME/.local/bin/dora"
+        cp "$PROJECT/thirdparty/dora/target/release/dora" "$HOME/.local/bin/dora"
         export PATH="$HOME/.local/bin:$PATH"
         log "dora CLI 已安装到 $HOME/.local/bin/dora"
     fi
@@ -259,8 +263,8 @@ install_venv() {
     local MATURIN="$HOME/.cargo/bin/maturin"
     if [ -x "$MATURIN" ]; then
         PYO3_PYTHON="$VENV_PYTHON" "$MATURIN" build \
-            -m "$PROJECT/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
-        local wheel=$(ls "$PROJECT/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
+            -m "$PROJECT/thirdparty/dora/apis/python/node/Cargo.toml" --release || warn "DORA wheel 构建失败"
+        local wheel=$(ls "$PROJECT/thirdparty/dora/target/wheels/dora_rs-"*.whl 2>/dev/null | head -1)
         if [ -n "$wheel" ]; then
             "$UV_BIN" pip install --python "$VENV_PYTHON" "$wheel" || warn "wheel 安装失败"
             log "DORA Python 包已安装"
