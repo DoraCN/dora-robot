@@ -93,7 +93,7 @@ fn arm_spawn(
                         break;
                     }
                 }
-                std::thread::sleep(Duration::from_millis(5));
+                std::thread::sleep(Duration::from_millis(25));
             }
             eprintln!("[arm] disconnected, reconnecting...");
         }
@@ -294,8 +294,8 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        // ② arm 位置 → zenoh 发布
-        while let Ok(positions) = arm_rx.try_recv() {
+        // ② arm 位置 → zenoh 发布（取最新一条）
+        if let Ok(positions) = arm_rx.try_recv() {
             if fsm.current() == tr_daemon::state::ArmState::Idle {
                 continue;
             }
