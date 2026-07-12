@@ -60,8 +60,8 @@ fn main() -> anyhow::Result<()> {
     eprintln!("[leader] USB -> {port}");
 
     // ── 单 runtime 驱动全部 I/O (zenoh + web + arm) ──
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io().enable_time().build()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1).enable_io().enable_time().build()?;
     let handle = rt.handle().clone();
 
     let k_ctrl = format!("tr/{id}/control");
