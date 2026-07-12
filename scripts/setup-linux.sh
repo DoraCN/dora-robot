@@ -109,16 +109,19 @@ check_deps() {
         log "uv 已安装"
     fi
 
-    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/dora" ]; then
-        warn "dora 子模块未初始化，正在拉取..."
-        cd "$PROJECT"
-        git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
-        cd - > /dev/null
-    fi
-
-    # Leader-only: dora 源码不需要，但 workspace 需要 Cargo.toml 存在用于 manifest 解析
-    if [ "$NEED_DORA" != true ] && [ ! -f "$PROJECT/thirdparty/dora/Cargo.toml" ]; then
-        create_dora_stubs
+    # DORA submodule: 从臂需要完整源码，主臂仅需骨架
+    if [ "$NEED_DORA" = true ]; then
+        if [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
+            warn "dora 子模块未初始化，正在拉取..."
+            rm -rf "$PROJECT/thirdparty/dora"  # 清理可能的旧骨架
+            cd "$PROJECT"
+            git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
+            cd - > /dev/null
+        fi
+    else
+        if [ ! -f "$PROJECT/thirdparty/dora/Cargo.toml" ] && [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
+            create_dora_stubs
+        fi
     fi
 
     if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/lerobot" ]; then
