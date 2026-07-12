@@ -88,12 +88,14 @@ check_deps() {
     fi
 
     if [ "$NEED_DORA" = true ]; then
-        if [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
-            warn "dora 子模块未初始化，正在拉取..."
-            rm -rf "$PROJECT/thirdparty/dora"
-            cd "$PROJECT" && git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
-            cd - > /dev/null
-        fi
+        for sub in thirdparty/dora thirdparty/lerobot; do
+            if [ ! -d "$PROJECT/$sub/.git" ]; then
+                warn "$sub 子模块未初始化，正在拉取..."
+                rm -rf "$PROJECT/$sub"
+                cd "$PROJECT" && git submodule update --init -- "$sub" || err "拉取 $sub 子模块失败"
+                cd - > /dev/null
+            fi
+        done
     else
         if [ ! -f "$PROJECT/thirdparty/dora/Cargo.toml" ] && [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
             create_dora_stubs

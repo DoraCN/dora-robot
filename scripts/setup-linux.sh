@@ -109,26 +109,22 @@ check_deps() {
         log "uv 已安装"
     fi
 
-    # DORA submodule: 从臂需要完整源码，主臂仅需骨架
+    # submodule 管理：从臂拉取全部，主臂仅创建 dora 骨架
     if [ "$NEED_DORA" = true ]; then
-        if [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
-            warn "dora 子模块未初始化，正在拉取..."
-            rm -rf "$PROJECT/thirdparty/dora"  # 清理可能的旧骨架
-            cd "$PROJECT"
-            git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
-            cd - > /dev/null
-        fi
+        # 从臂模式 — 初始化所有 thirdparty submodule
+        for sub in thirdparty/dora thirdparty/lerobot; do
+            if [ ! -d "$PROJECT/$sub/.git" ]; then
+                warn "$sub 子模块未初始化，正在拉取..."
+                rm -rf "$PROJECT/$sub"
+                cd "$PROJECT" && git submodule update --init -- "$sub" || err "拉取 $sub 子模块失败"
+                cd - > /dev/null
+            fi
+        done
     else
+        # 主臂模式 — dora 骨架即可
         if [ ! -f "$PROJECT/thirdparty/dora/Cargo.toml" ] && [ ! -d "$PROJECT/thirdparty/dora/.git" ]; then
             create_dora_stubs
         fi
-    fi
-
-    if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/lerobot" ]; then
-        warn "lerobot 子模块未初始化，正在拉取..."
-        cd "$PROJECT"
-        git submodule update --init -- thirdparty/lerobot || warn "拉取 lerobot 子模块失败（可后续手动更新）"
-        cd - > /dev/null
     fi
 
     if [ "$NEED_DORA" = true ] && [ ! -x "$DORA_BIN" ]; then
