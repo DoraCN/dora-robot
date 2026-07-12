@@ -90,8 +90,8 @@ body{
   transition:background .3s,color .3s
 }
 .c{
-  background:var(--card);border-radius:16px;padding:28px 24px;
-  width:500px;max-width:96vw;box-shadow:0 4px 32px rgba(0,0,0,.3);
+  background:var(--card);border-radius:16px;padding:36px 28px;
+  width:540px;max-width:96vw;box-shadow:0 4px 32px rgba(0,0,0,.3);
   transition:background .3s,transform .3s;position:relative
 }
 body.rot .c{position:fixed;top:50%;left:50%;margin:0;border-radius:0}
@@ -99,30 +99,30 @@ body.rot90 .c{transform:translate(-50%,-50%) rotate(90deg);width:90vh;max-width:
 body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
 body.rot270 .c{transform:translate(-50%,-50%) rotate(270deg);width:90vh;max-width:90vh}
 .toolbar{
-  display:flex;gap:6px;position:absolute;top:12px;right:16px;z-index:10
+  display:flex;gap:10px;position:absolute;top:14px;right:18px;z-index:10
 }
 .tbtn{
   border:none;background:var(--stat);color:var(--text);
-  border-radius:8px;width:36px;height:36px;font-size:18px;
+  border-radius:10px;width:44px;height:44px;font-size:22px;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   line-height:1;transition:.15s
 }
 .tbtn:hover{filter:brightness(1.2)}
 .tbtn:active{transform:scale(.93)}
-h1{font-size:20px;margin-bottom:2px;padding-right:110px}
-.st{font-size:13px;color:var(--sub);margin-bottom:18px}
-.status-bar{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+h1{font-size:22px;margin-bottom:2px;padding-right:130px}
+.st{font-size:14px;color:var(--sub);margin-bottom:20px}
+.status-bar{display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap}
 .status-item{
-  background:var(--stat);border-radius:10px;padding:10px 16px;
-  font-size:14px;flex:1;min-width:70px;text-align:center
+  background:var(--stat);border-radius:12px;padding:14px 20px;
+  font-size:15px;flex:1;min-width:75px;text-align:center
 }
 .status-item .l{color:var(--sub);font-size:12px}
-.status-item .v{font-weight:700;font-size:18px;margin-top:2px;display:block}
-.btn-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.status-item .v{font-weight:700;font-size:22px;margin-top:3px;display:block}
+.btn-row{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap}
 .btn{
-  border:none;border-radius:12px;padding:16px 20px;font-size:16px;
+  border:none;border-radius:14px;padding:20px 28px;font-size:18px;
   font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap;
-  flex:1;min-width:100px;min-height:56px;letter-spacing:.3px
+  flex:1;min-width:110px;min-height:72px;letter-spacing:.3px
 }
 .btn:active{transform:scale(.96)}
 .btn-on{background:#22c55e;color:#fff}
