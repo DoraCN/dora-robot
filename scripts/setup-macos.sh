@@ -333,11 +333,12 @@ build_project() {
     local CARGO="$HOME/.cargo/bin/cargo"
     cd "$PROJECT"
 
-    # 先停服务，避免 cp 报 Text file busy
+    # 先停服务，避免 cp 报 Text file busy + 残留进程
     for svc in com.dorarobot.follower com.dorarobot.leader; do
         launchctl unload "$HOME/Library/LaunchAgents/${svc}.plist" 2>/dev/null || true
         sudo launchctl unload "/Library/LaunchDaemons/${svc}.plist" 2>/dev/null || true
     done
+    killall -9 follower leader 2>/dev/null || true
 
     if [ "$NEED_DORA" = true ]; then
         "$CARGO" build --release || err "编译失败（从臂模式）"
@@ -460,6 +461,7 @@ EOF
 # ──────────────────────────────────────────────
 start_services() {
     log "启动服务..."
+    killall -9 follower leader 2>/dev/null || true
 
     if [ "$NEED_FOLLOWER" = true ]; then
         launchctl start com.dorarobot.follower

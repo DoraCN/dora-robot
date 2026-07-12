@@ -338,9 +338,10 @@ build_project() {
     local CARGO="$HOME/.cargo/bin/cargo"
     cd "$PROJECT"
 
-    # 先停服务，避免 cp 报 Text file busy
+    # 先停服务，避免 cp 报 Text file busy + 残留进程
     systemctl --user stop dorarobot-follower 2>/dev/null || true
     systemctl --user stop dorarobot-leader 2>/dev/null || true
+    killall -9 follower leader 2>/dev/null || true   # 强杀残留
 
     if [ "$NEED_DORA" = true ]; then
         "$CARGO" build --release || err "编译失败（从臂模式）"
@@ -443,6 +444,9 @@ EOF
 # ──────────────────────────────────────────────
 start_services() {
     log "启动服务..."
+
+    # 杀残余进程防止双开
+    killall -9 follower leader 2>/dev/null || true
 
     if [ "$NEED_FOLLOWER" = true ]; then
         systemctl --user start dorarobot-follower

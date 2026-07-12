@@ -21,11 +21,13 @@ cargo build --release -p tr-daemon
 case "$(uname -s)" in
     Linux)
         systemctl --user stop dorarobot-follower 2>/dev/null || true
+        killall -9 follower 2>/dev/null || true
         ;;
     Darwin)
         # 优先停 user LaunchAgent，再试旧系统级 LaunchDaemon
         launchctl unload "$HOME/Library/LaunchAgents/com.dorarobot.follower.plist" 2>/dev/null || true
         launchctl unload /Library/LaunchDaemons/com.dorarobot.follower.plist 2>/dev/null || true
+        killall -9 follower 2>/dev/null || true
         ;;
 esac
 
