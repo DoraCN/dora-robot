@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::Duration;
 use tr_codec::PostcardCodec;
@@ -12,8 +13,6 @@ use tr_so101::config::So101Config;
 use tr_so101::resolver::{parse_hex_u16, resolve_arm_port, UsbDeviceConfig};
 use tr_so101::{FeetechBus, So101Arm, So101Leader};
 use tr_teleop::TeleopDevice;
-use tr_transport::Transport;
-use tr_transport_zenoh::ZenohTransport;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -42,20 +41,37 @@ fn main() -> anyhow::Result<()> {
     };
     eprintln!("[leader] USB -> {port}");
 
-    let rt_zenoh = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2).enable_io().enable_time().build()?;
+    // ── zenoh: 1 worker thread, 1 session, direct pub/sub ──
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1).enable_io().enable_time().build()?;
 
+    let k_ctrl = format!("tr/{id}/control");
+    let k_cmd  = format!("tr/{id}/command");
     let k_status = format!("tr/{id}/status");
-    let mut t_status = ZenohTransport::subscriber(rt_zenoh.handle(), &k_status)?;
 
-    // Web server (always running, independent of arm connection)
-    let (status_tx, _) = tokio::sync::broadcast::channel::<String>(8);
+    let session = rt.block_on(async {
+        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+    })?;
+
+    // Subscriber status → mpsc（callback on zenoh worker thread）
+    let (status_tx_mpsc, status_rx) = mpsc::channel::<String>();
+    rt.block_on(async {
+        session.declare_subscriber(k_status.as_str())
+            .callback(move |sample| {
+                let payload = sample.payload().to_bytes().to_vec();
+                let _ = status_tx_mpsc.send(String::from_utf8_lossy(&payload).to_string());
+            })
+            .await.map_err(|e| anyhow::anyhow!("{e}"))
+    })?;
+
+    // Web server
+    let (status_tx_sse, _) = tokio::sync::broadcast::channel::<String>(8);
     let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let arm_info = format!("arm={id}");
-    let web_state = Arc::new(WebState { status_tx, cmd_tx, arm_info });
+    let web_state = Arc::new(WebState { status_tx: status_tx_sse, cmd_tx, arm_info });
     let app = web::router(web_state.clone());
-    let web_rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().enable_time().build()?;
+    let web_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_io().enable_time().build()?;
     web_rt.spawn(async {
         let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
         eprintln!("[leader] web console → http://localhost:8080");
@@ -80,8 +96,8 @@ fn main() -> anyhow::Result<()> {
 
     // ── Outer recovery loop ────────────────────────────────
     loop {
-        let (mut leader, _rt_arm, mut t_ctrl, mut t_cmd) =
-            match connect_leader_arm(&port, &config, &id, &rt_zenoh) {
+        let (mut leader, _rt_arm) =
+            match connect_leader_arm(&port, &config) {
                 Ok(t) => { backoff.reset(); t }
                 Err(e) => {
                     eprintln!("[leader] arm error: {e}");
@@ -94,38 +110,41 @@ fn main() -> anyhow::Result<()> {
 
         // ── Inner control loop ──────────────────────────────
         loop {
-            // Poll arm → pub control
             match leader.poll() {
                 Some(cmd) => {
                     if let Ok(bytes) = codec.encode_command(&cmd) {
-                        let _ = t_ctrl.send(tr_transport::qos::Channel::Control, &bytes);
+                        let s = session.clone();
+                        let k = k_ctrl.clone();
+                        rt.block_on(async {
+                            s.put(k, bytes)
+                                .congestion_control(zenoh::qos::CongestionControl::Drop)
+                                .await
+                        }).ok();
                     }
                 }
-                None => {} // no data available
+                None => {}
             }
 
-            // Relay follower status → SSE
-            match t_status.recv(Duration::from_millis(5)) {
-                Ok(Some(inbound)) => {
-                    let _ = web_state.status_tx.send(
-                        String::from_utf8_lossy(&inbound.frame).to_string()
-                    );
+            // Follower status → SSE
+            match status_rx.recv_timeout(Duration::from_millis(5)) {
+                Ok(json) => {
+                    let _ = web_state.status_tx.send(json);
                 }
-                Ok(None) => {}
-                Err(_) => {} // status channel optional, don't crash on error
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(_) => {}
             }
 
             // Keyboard
             if let Ok(line) = kb_rx.try_recv() {
                 if let Some(cmd) = parse_key(&line) {
-                    send_cmd(&mut t_cmd, &codec, cmd);
+                    send_zenoh_cmd(&codec, cmd, &session, &k_cmd, &rt);
                 }
             }
 
             // Web commands
             while let Ok(cmd_str) = cmd_rx.try_recv() {
                 if let Some(cmd) = parse_web_cmd(&cmd_str) {
-                    send_cmd(&mut t_cmd, &codec, cmd);
+                    send_zenoh_cmd(&codec, cmd, &session, &k_cmd, &rt);
                 }
             }
 
@@ -137,16 +156,12 @@ fn main() -> anyhow::Result<()> {
 fn connect_leader_arm(
     port: &str,
     config: &DaemonConfig,
-    id: &str,
-    rt_zenoh: &tokio::runtime::Runtime,
 ) -> anyhow::Result<(
     So101Leader<feetech_servo_sdk::driver::FeetechController<tokio_serial::SerialStream>>,
     tokio::runtime::Runtime,
-    ZenohTransport,
-    ZenohTransport,
 )> {
-    let rt_arm = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().enable_time().build()?;
+    let rt_arm = tokio::runtime::Builder::new_current_thread()
+        .enable_io().enable_time().build()?;
 
     let _guard = rt_arm.enter();
     let bus = FeetechBus::new(port, config.arm.so101.baud)?;
@@ -154,10 +169,7 @@ fn connect_leader_arm(
     let leader = So101Leader::new(arm, 1, "leader");
     drop(_guard);
 
-    let t_ctrl = ZenohTransport::publisher(rt_zenoh.handle(), &format!("tr/{id}/control"))?;
-    let t_cmd  = ZenohTransport::publisher(rt_zenoh.handle(), &format!("tr/{id}/command"))?;
-
-    Ok((leader, rt_arm, t_ctrl, t_cmd))
+    Ok((leader, rt_arm))
 }
 
 fn parse_key(line: &str) -> Option<ControlCommand> {
@@ -184,10 +196,16 @@ fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
     }
 }
 
-fn send_cmd(t_cmd: &mut ZenohTransport, codec: &PostcardCodec, cmd: ControlCommand) {
+fn send_zenoh_cmd(codec: &PostcardCodec, cmd: ControlCommand, session: &zenoh::Session, key: &str, rt: &tokio::runtime::Runtime) {
     println!("  -> {:?}", cmd);
     if let Ok(bytes) = codec.encode_control_command(&cmd) {
-        let _ = t_cmd.send(tr_transport::qos::Channel::Control, &bytes);
+        let k = key.to_string();
+        let s = session.clone();
+        rt.block_on(async {
+            s.put(k, bytes)
+                .congestion_control(zenoh::qos::CongestionControl::Drop)
+                .await
+        }).ok();
     }
     let _ = io::stdout().flush();
 }

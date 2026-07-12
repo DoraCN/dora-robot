@@ -6014,6 +6014,7 @@ dependencies = [
  "tr-transport",
  "tr-transport-zenoh",
  "usb-resolver",
+ "zenoh",
 ]
 
 [[package]]

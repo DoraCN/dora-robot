@@ -13,6 +13,7 @@ tr-teleop.workspace = true
 tr-codec.workspace = true
 tr-transport.workspace = true
 tr-transport-zenoh = { path = "../tr-transport-zenoh" }
+zenoh = { workspace = true }
 feetech-servo-sdk = "0.3.0"
 tokio-serial = "5"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
