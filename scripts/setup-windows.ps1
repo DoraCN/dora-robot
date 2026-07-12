@@ -18,6 +18,52 @@ function Write-Err   { Write-Host "[error] $args" -ForegroundColor Red; exit 1 }
 # 1. 前置检查
 # ──────────────────────────────────────────────
 
+function New-DoraStubs {
+    Write-Log "创建 dora Cargo.toml 骨架（主臂模式无需完整源码）..."
+    $D = "$PROJECT\thirdparty\dora"
+    $pairs = @(
+        @("apis\rust\node", "dora-node-api", ""),
+        @("libraries\core", "dora-core", "zenoh"),
+        @("libraries\message", "dora-message", ""),
+        @("libraries\arrow-convert", "dora-arrow-convert", ""),
+        @("libraries\shared-memory-server", "shared-memory-server", ""),
+        @("libraries\extensions\telemetry\tracing", "dora-tracing", ""),
+        @("libraries\extensions\telemetry\metrics", "dora-metrics", "")
+    )
+    foreach ($e in $pairs) {
+        $dir = $e[0]; $name = $e[1]; $feat = $e[2]
+        $p = Join-Path $D $dir
+        $src = Join-Path $p "src"
+        New-Item -ItemType Directory -Force -Path $src | Out-Null
+        "" | Out-File -FilePath (Join-Path $src "lib.rs") -Encoding ASCII
+        if ($feat) {
+@"
+[package]
+name = "$name"
+version = "1.0.0-rc1"
+edition = "2021"
+
+[features]
+$feat = []
+
+[lib]
+path = "src/lib.rs"
+"@ | Out-File -FilePath (Join-Path $p "Cargo.toml") -Encoding ASCII
+        } else {
+@"
+[package]
+name = "$name"
+version = "1.0.0-rc1"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+"@ | Out-File -FilePath (Join-Path $p "Cargo.toml") -Encoding ASCII
+        }
+    }
+    Write-Log "骨架已创建"
+}
+
 function Check-Deps {
     Write-Log "检查前置依赖..."
 
@@ -57,6 +103,9 @@ function Check-Deps {
         $env:Path = "$binDir;$env:Path"
         [Environment]::SetEnvironmentVariable("Path", "$binDir;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
         Write-Log "dora CLI 已安装到 $binDir\"
+    }
+    if (-not $script:NEED_DORA -and -not (Test-Path "$PROJECT\thirdparty\dora\Cargo.toml")) {
+        New-DoraStubs
     }
     Write-Log "依赖检查通过"
 }

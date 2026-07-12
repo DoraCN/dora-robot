@@ -21,7 +21,10 @@ __pycache__/
 **/.DS_Store
 
 /logs
-# thirdparty/ is managed by git submodule — NOT gitignored
+# thirdparty/dora 和 /thirdparty/lerobot 由 git submodule 管理
+# stub 文件在主臂模式创建时会被忽略，submodule 初始化时不受影响
+/thirdparty/dora
+/thirdparty/lerobot
 crates/tr-daemon/out/
 out/
 dataflows/datasets/

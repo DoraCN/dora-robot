@@ -15,6 +15,56 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
+# ── Leader-only: 创建 dora 骨架（仅 Cargo.toml），满足 workspace 解析 ──
+create_dora_stubs() {
+    log "创建 dora Cargo.toml 骨架（主臂模式无需完整源码）..."
+    local D="$PROJECT/thirdparty/dora"
+    local PAIRS=(
+        "apis/rust/node:dora-node-api:"
+        "libraries/core:dora-core:zenoh"
+        "libraries/message:dora-message:"
+        "libraries/arrow-convert:dora-arrow-convert:"
+        "libraries/shared-memory-server:shared-memory-server:"
+        "libraries/extensions/telemetry/tracing:dora-tracing:"
+        "libraries/extensions/telemetry/metrics:dora-metrics:"
+    )
+    for entry in "${PAIRS[@]}"; do
+        local dir="${entry%%:*}"
+        local rest="${entry#*:}"
+        local name="${rest%%:*}"
+        local feat="${rest##*:}"
+        [ "$feat" = "$name" ] && feat=""
+        local p="$D/$dir"
+        mkdir -p "$p/src"
+        echo -n "" > "$p/src/lib.rs"
+        if [ -n "$feat" ]; then
+            cat > "$p/Cargo.toml" << CARGO_EOF
+[package]
+name = "$name"
+version = "1.0.0-rc1"
+edition = "2021"
+
+[features]
+$feat = []
+
+[lib]
+path = "src/lib.rs"
+CARGO_EOF
+        else
+            cat > "$p/Cargo.toml" << CARGO_EOF
+[package]
+name = "$name"
+version = "1.0.0-rc1"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+CARGO_EOF
+        fi
+    done
+    log "骨架已创建（~KB 级，编译主臂无需拉取 dora 源码）"
+}
+
 # ──────────────────────────────────────────────
 # 1. 前置依赖
 # ──────────────────────────────────────────────
@@ -41,6 +91,10 @@ check_deps() {
         warn "dora 子模块未初始化，正在拉取..."
         cd "$PROJECT" && git submodule update --init -- thirdparty/dora || err "拉取 dora 子模块失败"
         cd - > /dev/null
+    fi
+
+    if [ "$NEED_DORA" != true ] && [ ! -f "$PROJECT/thirdparty/dora/Cargo.toml" ]; then
+        create_dora_stubs
     fi
 
     if [ "$NEED_DORA" = true ] && [ ! -d "$PROJECT/thirdparty/lerobot" ]; then
