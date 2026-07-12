@@ -15,6 +15,33 @@ warn() { echo -e "${YELLOW}[warn]${NC}  $*"; }
 err()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 info() { echo -e "${CYAN}        $*${NC}"; }
 
+# ── 串口权限：用户加入 dialout 组 ────────────
+ensure_serial_permission() {
+    log "检查串口权限..."
+    # 找到系统中控制串口的组（不同发行版不同）
+    local grp=""
+    for g in dialout uucp tty plugdev; do
+        if getent group "$g" >/dev/null 2>&1; then
+            grp="$g"; break
+        fi
+    done
+    if [ -z "$grp" ]; then
+        warn "未找到串口用户组，跳过"
+        return
+    fi
+    if id -nG "$USER" | grep -qw "$grp"; then
+        log "用户已在 $grp 组中，权限正常"
+        return
+    fi
+    warn "用户不在 $grp 组中，正在加入..."
+    sudo usermod -a -G "$grp" "$USER" || warn "usermod 失败"
+    log "已加入 $grp 组"
+    warn "──────────────────────────────────────"
+    warn "  ⚠ 需要退出重新登录后权限才生效"
+    warn "  或立即执行: newgrp $grp"
+    warn "──────────────────────────────────────"
+}
+
 # ──────────────────────────────────────────────
 # 1. 系统依赖（需要 sudo 提权）
 # ──────────────────────────────────────────────
@@ -533,6 +560,7 @@ main() {
 
     # ── 第二步：全自动安装 ──
     install_system_deps                    # ① 第一步：提权装系统依赖
+    ensure_serial_permission                # ② 串口权限
     if [ "$NEED_DORA" = true ]; then
         ensure_python312
     fi
@@ -560,7 +588,9 @@ main() {
     echo "  ║  主臂日志: journalctl --user -u dorarobot-leader -f  ║"
     echo "  ║  停止主臂: systemctl --user stop dorarobot-leader    ║"
     fi
-    echo "  ╚══════════════════════════════════════════╝"
+    echo "  ║                                              ║"
+    echo "  ║  ⚠ 首次安装后需退出重新登录使串口权限生效  ║"
+    echo "  ╚══════════════════════════════════════════════╝"
 }
 
 main
