@@ -114,7 +114,7 @@ fn main() -> anyhow::Result<()> {
     // ── sync 主循环 ─────────────────────────────
     loop {
         let (mut leader, _rt_arm) =
-            match connect_leader_arm(&port, &config) {
+            match connect_leader_arm(&port, &config, &rt) {
                 Ok(t) => { backoff.reset(); t }
                 Err(e) => {
                     eprintln!("[leader] arm error: {e}");
@@ -172,14 +172,16 @@ fn main() -> anyhow::Result<()> {
 fn connect_leader_arm(
     port: &str,
     config: &DaemonConfig,
+    rt: &tokio::runtime::Runtime,
 ) -> anyhow::Result<(
     So101Leader<feetech_servo_sdk::driver::FeetechController<tokio_serial::SerialStream>>,
     (),
 )> {
+    let _guard = rt.enter();
     let bus = FeetechBus::new(port, config.arm.so101.baud)?;
     let arm = So101Arm::new(bus, So101Config::default());
-    let leader = So101Leader::new(arm, 1, "leader");
-    Ok((leader, ()))
+    drop(_guard);
+    Ok((So101Leader::new(arm, 1, "leader"), ()))
 }
 
 fn parse_key(line: &str) -> Option<ControlCommand> {
