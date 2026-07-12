@@ -94,9 +94,10 @@ body{
   width:500px;max-width:96vw;box-shadow:0 4px 32px rgba(0,0,0,.3);
   transition:background .3s,transform .3s;position:relative
 }
-.c.r90{transform:rotate(90deg);transform-origin:center center}
-.c.r180{transform:rotate(180deg)}
-.c.r270{transform:rotate(270deg)}
+body.rot .c{position:fixed;top:50%;left:50%;margin:0;border-radius:0}
+body.rot90 .c{transform:translate(-50%,-50%) rotate(90deg);width:90vh;max-width:90vh}
+body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
+body.rot270 .c{transform:translate(-50%,-50%) rotate(270deg);width:90vh;max-width:90vh}
 .toolbar{
   display:flex;gap:6px;position:absolute;top:12px;right:16px;z-index:10
 }
@@ -186,15 +187,15 @@ h1{font-size:20px;margin-bottom:2px;padding-right:110px}
 
 <script>
 let rotateIdx=0;
-const ROTATES=['','r90','r180','r270'];
-const c=document.getElementById('main');
+const ROTATES=['','rot90','rot180','rot270'];
 
 function toggleRotate(){
   rotateIdx=(rotateIdx+1)%4;
-  ROTATES.forEach(r=>c.classList.remove(r));
+  const body=document.body;
+  body.classList.remove('rot','rot90','rot180','rot270');
   const r=ROTATES[rotateIdx];
-  if(r)c.classList.add(r);
-  document.getElementById('btn-rotate').textContent=[ '↻','↺','↻','↺'][rotateIdx];
+  if(r){body.classList.add('rot',r);}
+  document.getElementById('btn-rotate').textContent=['↻','↺','↻','↺'][rotateIdx];
 }
 
 function toggleTheme(){
