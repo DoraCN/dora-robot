@@ -11,7 +11,7 @@ use tr_codec::PostcardCodec;
 use tr_daemon::config::DaemonConfig;
 use tr_daemon::retry::Backoff;
 use tr_daemon::web::{self, WebState};
-use tr_messages::control::ControlCommand;
+use tr_messages::control::{ControlCommand, DaemonStatus};
 use tr_messages::{Codec, CommandBody, ControlMode, JointTargets, MessageHeader, TeleopCommand};
 use tr_messages::EpisodeOutcome;
 use tr_so101::config::So101Config;
@@ -194,7 +194,24 @@ fn main() -> anyhow::Result<()> {
         while let Ok(cmd) = ctrl_rx.try_recv() {
             let (state, _) = fsm.apply(&cmd);
             eprintln!("[ctrl] {cmd:?} → {state:?}");
-            // 控制指令 → zenoh
+
+            // 本地状态 → SSE（即时反馈，不等从臂回应）
+            let state_str = match state {
+                tr_daemon::state::ArmState::Idle => "IDLE",
+                tr_daemon::state::ArmState::Ready => "READY",
+                tr_daemon::state::ArmState::Recording => "RECORDING",
+            };
+            let st = DaemonStatus {
+                state: state_str.into(),
+                torque_on: state != tr_daemon::state::ArmState::Idle,
+                recording: state == tr_daemon::state::ArmState::Recording,
+                episode: None, frame_count: 0, fps: 0.0, error: None,
+            };
+            if let Ok(json) = serde_json::to_string(&st) {
+                let _ = web_state_tx.send(json);
+            }
+
+            // 控制指令 → zenoh（从臂收到后也会回状态）
             if let Ok(bytes) = codec.encode_control_command(&cmd) {
                 let s = session.clone();
                 let k = k_cmd.clone();
