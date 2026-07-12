@@ -95,8 +95,12 @@ body{
   transition:background .3s,transform .3s;position:relative
 }
 body.rot .c{position:fixed;top:50%;left:50%;margin:0;border-radius:0}
-body.rot90 .c,body.rot270 .c{
+body.rot90 .c{
   transform:translate(-50%,-50%) rotate(90deg);width:88vh;max-width:88vh;
+  padding:28px 22px;display:flex;flex-direction:column;gap:20px
+}
+body.rot270 .c{
+  transform:translate(-50%,-50%) rotate(270deg);width:88vh;max-width:88vh;
   padding:28px 22px;display:flex;flex-direction:column;gap:20px
 }
 body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
