@@ -280,11 +280,8 @@ fn main() -> anyhow::Result<()> {
             let (state, action) = fsm.apply(&cmd);
             eprintln!("[main] ctrl={:?} → {:?}", cmd, state);
 
-            // 力矩控制 → arm 线程
+            // 力矩控制 → arm 线程（主臂始终不上力）
             match action {
-                tr_daemon::state::DataflowAction::Launch => {
-                    let _ = arm_cmd_tx.send(ArmCmd::EnableTorque);
-                }
                 tr_daemon::state::DataflowAction::Stop => {
                     let _ = arm_cmd_tx.send(ArmCmd::DisableTorque);
                 }
