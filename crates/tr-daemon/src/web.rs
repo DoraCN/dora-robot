@@ -92,12 +92,12 @@ body{
 .c{
   background:var(--card);border-radius:16px;padding:28px 24px;
   width:500px;max-width:96vw;box-shadow:0 4px 32px rgba(0,0,0,.3);
-  transition:background .3s,width .3s;position:relative
+  transition:background .3s,transform .3s;position:relative
 }
-/* 90°/270°: 窄宽适配竖屏，布局不变 */
-body.rot90 .c,body.rot270 .c{width:90vh;max-width:90vh}
-/* 180°: 纯视觉旋转，适配倒装屏幕 */
-body.rot180 .c{transform:rotate(.5turn)}
+body.rot .c{position:fixed;top:50%;left:50%;margin:0;border-radius:0}
+body.rot90 .c{transform:translate(-50%,-50%) rotate(90deg);width:90vh;max-width:90vh}
+body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
+body.rot270 .c{transform:translate(-50%,-50%) rotate(270deg);width:90vh;max-width:90vh}
 .toolbar{
   display:flex;gap:6px;position:absolute;top:12px;right:16px;z-index:10
 }
@@ -191,9 +191,10 @@ const ROTATES=['','rot90','rot180','rot270'];
 
 function toggleRotate(){
   rotateIdx=(rotateIdx+1)%4;
-  document.body.classList.remove('rot90','rot180','rot270');
+  const body=document.body;
+  body.classList.remove('rot','rot90','rot180','rot270');
   const r=ROTATES[rotateIdx];
-  if(r)document.body.classList.add(r);
+  if(r){body.classList.add('rot',r);}
   document.getElementById('btn-rotate').textContent=['↻','↺','↻','↺'][rotateIdx];
 }
 
