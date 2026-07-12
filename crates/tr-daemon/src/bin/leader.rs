@@ -128,6 +128,7 @@ fn main() -> anyhow::Result<()> {
     println!("── leader-daemon ──");
     println!("  port: {port}");
     println!("  web:  http://localhost:8080");
+    println!("  keys:  o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
     println!("────────────────────");
 
     loop {
