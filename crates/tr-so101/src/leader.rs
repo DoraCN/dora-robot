@@ -24,7 +24,7 @@ fn now_nanos() -> u64 {
 /// TeleopDevice role: human moves the arm to drive a remote follower.
 pub struct So101Leader<B: MotorBus> {
     arm: So101Arm<B>,
-    rt: tokio::runtime::Runtime,
+    handle: tokio::runtime::Handle,
     seq: u64,
     session_id: SessionId,
     source_id: String,
@@ -33,18 +33,15 @@ pub struct So101Leader<B: MotorBus> {
 impl<B: MotorBus> So101Leader<B> {
     pub fn new(
         mut arm: So101Arm<B>,
+        handle: tokio::runtime::Handle,
         session_id: SessionId,
         source_id: impl Into<String>,
     ) -> Self {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io().enable_time()
-            .build()
-            .unwrap();
         // Leader is backdrivable — torque off.
-        let _ = rt.block_on(async { arm.set_torque(false).await });
+        let _ = handle.block_on(async { arm.set_torque(false).await });
         Self {
             arm,
-            rt,
+            handle,
             seq: 0,
             session_id,
             source_id: source_id.into(),
@@ -67,7 +64,7 @@ impl<B: MotorBus> TeleopDevice for So101Leader<B> {
 
     fn poll(&mut self) -> Option<TeleopCommand> {
         let joints_f32 = self
-            .rt
+            .handle
             .block_on(async { self.arm.read_joints().await })
             .ok()?;
         let positions: Vec<f64> = joints_f32.into_iter().map(|j| j as f64).collect();
@@ -104,11 +101,12 @@ mod tests {
 
     #[test]
     fn poll_reads_calibrated_mock_positions() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
         let bus = MockBus::new(&IDS);
         bus.set_servo_position_instant(2, 1.0);
         bus.set_servo_position_instant(5, -0.5);
         let arm = So101Arm::new(bus, So101Config::default());
-        let mut leader = So101Leader::new(arm, 42, "test_leader");
+        let mut leader = So101Leader::new(arm, rt.handle().clone(), 42, "test_leader");
         let cmd = leader.poll().expect("should emit a command");
         match cmd.body {
             CommandBody::Joint(jt) => {
@@ -122,8 +120,9 @@ mod tests {
 
     #[test]
     fn poll_increments_seq() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
         let arm = So101Arm::new(MockBus::new(&IDS), So101Config::default());
-        let mut leader = So101Leader::new(arm, 1, "l");
+        let mut leader = So101Leader::new(arm, rt.handle().clone(), 1, "l");
         let h1 = leader.poll().unwrap().header;
         let h2 = leader.poll().unwrap().header;
         assert_eq!(h2.seq, h1.seq + 1);
