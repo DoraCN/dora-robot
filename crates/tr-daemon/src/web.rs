@@ -95,9 +95,19 @@ body{
   transition:background .3s,transform .3s;position:relative
 }
 body.rot .c{position:fixed;top:50%;left:50%;margin:0;border-radius:0}
-body.rot90 .c{transform:translate(-50%,-50%) rotate(90deg);width:90vh;max-width:90vh}
+body.rot90 .c,body.rot270 .c{
+  transform:translate(-50%,-50%) rotate(90deg);width:90vh;max-width:90vh;
+  padding:28px 20px;display:flex;flex-direction:column;gap:16px
+}
 body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
-body.rot270 .c{transform:translate(-50%,-50%) rotate(270deg);width:90vh;max-width:90vh}
+/* 竖屏: 状态栏竖排，按钮铺满 */
+body.rot90 .status-bar,body.rot270 .status-bar{flex-direction:column;gap:8px}
+body.rot90 .status-item,body.rot270 .status-item{flex:none;text-align:left;display:flex;justify-content:space-between;align-items:center;padding:10px 16px}
+body.rot90 .status-item .v,body.rot270 .status-item .v{margin-top:0}
+body.rot90 .btn,body.rot270 .btn{flex:none;width:100%}
+body.rot90 .btn-row,body.rot270 .btn-row{flex-direction:column;gap:10px}
+body.rot90 h1,body.rot270 h1{padding-right:0}
+body.rot90 .toolbar,body.rot270 .toolbar{position:static;justify-content:flex-end;margin-bottom:4px}
 .toolbar{
   display:flex;gap:10px;position:absolute;top:14px;right:18px;z-index:10
 }
