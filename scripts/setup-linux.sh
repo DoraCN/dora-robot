@@ -289,7 +289,7 @@ build_project() {
         "$CARGO" build --release || err "编译失败（从臂模式）"
         "$CARGO" build -p tr-capture --release || err "tr-capture 编译失败"
     else
-        "$CARGO" build --workspace --exclude tr-capture --release || err "编译失败（主臂模式）"
+        "$CARGO" build -p tr-daemon --release || err "编译失败（主臂模式）"
     fi
 
     log "部署二进制到 bin/..."

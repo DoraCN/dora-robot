@@ -190,7 +190,7 @@ function Build-Project {
         cargo build -p tr-capture --release
         if ($LASTEXITCODE -ne 0) { Write-Err "tr-capture 编译失败" }
     } else {
-        cargo build --workspace --exclude tr-capture --release
+        cargo build -p tr-daemon --release
         if ($LASTEXITCODE -ne 0) { Write-Err "编译失败（主臂模式）" }
     }
 
