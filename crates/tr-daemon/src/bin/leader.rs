@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     eprintln!("[leader] USB -> {port}");
 
     let rt_zenoh = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4).enable_io().enable_time().build()?;
+        .worker_threads(2).enable_io().enable_time().build()?;
 
     let k_status = format!("tr/{id}/status");
     let mut t_status = ZenohTransport::subscriber(rt_zenoh.handle(), &k_status)?;
