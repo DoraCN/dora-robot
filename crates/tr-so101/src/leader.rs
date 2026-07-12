@@ -37,7 +37,7 @@ impl<B: MotorBus> So101Leader<B> {
         source_id: impl Into<String>,
     ) -> Self {
         let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
+            .enable_io().enable_time()
             .build()
             .unwrap();
         // Leader is backdrivable — torque off.

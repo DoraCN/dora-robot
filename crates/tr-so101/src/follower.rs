@@ -47,7 +47,7 @@ impl<B: MotorBus> So101Follower<B> {
     ) -> Self {
         let slew_rad = arm.config().max_slew_rad.max(SLEW_DEFAULT_RAD);
         let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
+            .enable_io().enable_time()
             .build()
             .unwrap();
         // Follower is actively driven — torque on.
