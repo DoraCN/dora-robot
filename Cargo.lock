@@ -5998,6 +5998,7 @@ dependencies = [
  "axum",
  "chrono",
  "feetech-servo-sdk",
+ "libc",
  "log",
  "serde",
  "serde_json",

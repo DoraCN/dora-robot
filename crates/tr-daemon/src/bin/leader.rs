@@ -87,15 +87,18 @@ fn main() -> anyhow::Result<()> {
         }
     });
 
-    // keyboard
-    std::thread::spawn({
-        let tx = ctrl_tx2;
-        move || loop {
-            let mut line = String::new();
-            if io::stdin().read_line(&mut line).is_err() { break; }
-            if let Some(c) = parse_key(&line) { let _ = tx.send(c); }
-        }
-    });
+    // keyboard (仅在终端下启用，systemd 服务下 stdin=/dev/null 会导致死循环)
+    if unsafe { libc::isatty(0) } != 0 {
+        std::thread::spawn({
+            let tx = ctrl_tx2;
+            move || loop {
+                let mut line = String::new();
+                if io::stdin().read_line(&mut line).is_err() { break; }
+                if line.trim().is_empty() { continue; }
+                if let Some(c) = parse_key(&line) { let _ = tx.send(c); }
+            }
+        });
+    }
 
     // zenoh session
     let session = rt.block_on(async {
