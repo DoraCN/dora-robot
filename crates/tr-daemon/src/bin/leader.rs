@@ -14,7 +14,26 @@ use tr_so101::resolver::{parse_hex_u16, resolve_arm_port, UsbDeviceConfig};
 use tr_so101::{FeetechBus, So101Arm, So101Leader};
 use tr_teleop::TeleopDevice;
 
+use std::path::Path;
+
+fn check_single_instance() -> bool {
+    let pid_file = "/tmp/dorarobot-leader.pid";
+    if let Ok(content) = std::fs::read_to_string(pid_file) {
+        if let Ok(pid) = content.trim().parse::<i32>() {
+            if Path::new(&format!("/proc/{pid}")).exists() {
+                eprintln!("[leader] 已有实例运行 PID={pid}，退出");
+                return false;
+            }
+        }
+    }
+    let _ = std::fs::write(pid_file, std::process::id().to_string());
+    true
+}
+
 fn main() -> anyhow::Result<()> {
+    if !check_single_instance() {
+        return Ok(());
+    }
     let args: Vec<String> = std::env::args().collect();
     let config_path = args
         .iter().position(|a| a == "--config")
