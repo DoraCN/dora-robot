@@ -110,7 +110,19 @@ enum ArmCmd {
 
 struct ZenohHandle {
     session: zenoh::Session,
-    _rt: tokio::runtime::Runtime,
+    rt: tokio::runtime::Runtime,
+}
+
+impl ZenohHandle {
+    fn publish(&self, key: &str, payload: Vec<u8>) {
+        let s = self.session.clone();
+        let k = key.to_string();
+        self.rt.spawn(async move {
+            s.put(k, payload)
+                .congestion_control(zenoh::qos::CongestionControl::Drop)
+                .await.ok();
+        });
+    }
 }
 
 fn zenoh_spawn(
@@ -165,7 +177,7 @@ fn zenoh_spawn(
     }).unwrap();
 
     eprintln!("[zenoh] session ready");
-    ZenohHandle { session, _rt: rt }
+    ZenohHandle { session, rt }
 }
 
 fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
@@ -281,11 +293,7 @@ fn main() -> anyhow::Result<()> {
 
             // 控制指令 → zenoh
             if let Ok(bytes) = codec.encode_control_command(&cmd) {
-                let s = zh.session.clone();
-                let k = k_cmd.clone();
-                tokio::spawn(async move {
-                    s.put(k, bytes).congestion_control(zenoh::qos::CongestionControl::Drop).await.ok();
-                });
+                zh.publish(&k_cmd, bytes);
             }
         }
 
@@ -305,11 +313,7 @@ fn main() -> anyhow::Result<()> {
             };
             seq += 1;
             if let Ok(bytes) = codec.encode_command(&cmd) {
-                let s = zh.session.clone();
-                let k = k_ctrl.clone();
-                tokio::spawn(async move {
-                    s.put(k, bytes).congestion_control(zenoh::qos::CongestionControl::Drop).await.ok();
-                });
+                zh.publish(&k_ctrl, bytes);
             }
         }
 
