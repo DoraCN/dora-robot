@@ -59,133 +59,126 @@ fn main() -> anyhow::Result<()> {
     };
     eprintln!("[leader] USB -> {port}");
 
-    // ── 单 runtime 驱动全部 I/O (zenoh + web + arm) ──
+    // ── 1 个 runtime 驱动 zenoh + web（zenoh 要求 multi_thread） ──
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1).enable_io().enable_time().build()?;
-    let handle = rt.handle().clone();
 
     let k_ctrl = format!("tr/{id}/control");
     let k_cmd  = format!("tr/{id}/command");
     let k_status = format!("tr/{id}/status");
 
-    // Web server — 与 zenoh 复用同一个 runtime
+    // Web server — spawn 在共享 runtime
     let (status_tx, _) = tokio::sync::broadcast::channel::<String>(8);
     let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let arm_info = format!("arm={id}");
     let web_state = Arc::new(WebState { status_tx: status_tx.clone(), cmd_tx, arm_info });
     let app = web::router(web_state.clone());
-
-    let (kb_tx, kb_rx) = std::sync::mpsc::channel::<String>();
-    let codec = PostcardCodec;
-    let mut backoff = Backoff::new(1, 30);
-
-    rt.block_on(async move {
-        // ── 启动 web server 在同一个 runtime 上 ──
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+    rt.spawn(async {
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
         eprintln!("[leader] web console → http://localhost:8080");
-        tokio::spawn(async { axum::serve(listener, app).await.unwrap() });
+        axum::serve(listener, app).await.unwrap();
+    });
 
-        // ── 启动 zenoh session ──
-        let session = zenoh::open(zenoh::Config::default()).await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Zenoh
+    let session = rt.block_on(async {
+        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+    })?;
 
-        // subscriber callback
-        let (status_tx_mpsc, status_rx) = mpsc::channel::<String>();
+    // subscriber callback → mpsc
+    let (status_tx_mpsc, status_rx) = mpsc::channel::<String>();
+    rt.block_on(async {
         session.declare_subscriber(k_status.as_str())
             .callback(move |sample| {
                 let payload = sample.payload().to_bytes().to_vec();
                 let _ = status_tx_mpsc.send(String::from_utf8_lossy(&payload).to_string());
             })
-            .await.map_err(|e| anyhow::anyhow!("{e}"))?;
-
-        // ── 键盘线程 ──
-        std::thread::spawn(move || loop {
-            let mut line = String::new();
-            if io::stdin().read_line(&mut line).is_err() { break; }
-            let _ = kb_tx.send(line);
-        });
-
-        println!("── leader-daemon ──");
-        println!("  Web: http://localhost:8080");
-        println!("  keyboard: o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
-        println!("────────────────────");
-
-        // ── Outer recovery loop ──────────────────────
-        let mut interval = tokio::time::interval(Duration::from_millis(25));
-        loop {
-            let (mut leader, _rt_arm) = loop {
-                match connect_leader_arm(&port, &config, &handle) {
-                    Ok(t) => { backoff.reset(); break t; }
-                    Err(e) => {
-                        eprintln!("[leader] arm error: {e}");
-                        backoff.wait_and_advance();
-                    }
-                }
-            };
-            eprintln!("[leader] connected");
-
-            let mut loops: u64 = 0;
-            let mut t0 = tokio::time::Instant::now();
-            loop {
-                interval.tick().await;
-
-                match leader.poll() {
-                    Some(cmd) => {
-                        if let Ok(bytes) = codec.encode_command(&cmd) {
-                            session.put(k_ctrl.as_str(), bytes)
-                                .congestion_control(zenoh::qos::CongestionControl::Drop)
-                                .await.ok();
-                        }
-                    }
-                    None => {}
-                }
-
-                // Follower status → SSE
-                match status_rx.try_recv() {
-                    Ok(json) => { let _ = status_tx.send(json); }
-                    Err(_) => {}
-                }
-
-                // Keyboard
-                if let Ok(line) = kb_rx.try_recv() {
-                    if let Some(cmd) = parse_key(&line) {
-                        send_zenoh_cmd(&codec, cmd, session.clone(), &k_cmd);
-                    }
-                }
-
-                // Web commands
-                while let Ok(cmd_str) = cmd_rx.try_recv() {
-                    if let Some(cmd) = parse_web_cmd(&cmd_str) {
-                        send_zenoh_cmd(&codec, cmd, session.clone(), &k_cmd);
-                    }
-                }
-
-                loops += 1;
-                if t0.elapsed() >= Duration::from_secs(2) {
-                    eprintln!("[leader] loops={loops} arm_error={}", leader.poll().is_none());
-                    loops = 0;
-                    t0 = tokio::time::Instant::now();
-                }
-            }
-        }
-        #[allow(unreachable_code)]
-        Ok::<_, anyhow::Error>(())
+            .await.map_err(|e| anyhow::anyhow!("{e}"))
     })?;
 
-    Ok(())
+    // Keyboard
+    let (kb_tx, kb_rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || loop {
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line).is_err() { break; }
+        let _ = kb_tx.send(line);
+    });
+
+    let codec = PostcardCodec;
+    let mut backoff = Backoff::new(1, 30);
+
+    println!("── leader-daemon ──");
+    println!("  Web: http://localhost:8080");
+    println!("  keyboard: o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
+    println!("────────────────────");
+
+    // ── sync 主循环 ─────────────────────────────
+    loop {
+        let (mut leader, _rt_arm) =
+            match connect_leader_arm(&port, &config) {
+                Ok(t) => { backoff.reset(); t }
+                Err(e) => {
+                    eprintln!("[leader] arm error: {e}");
+                    backoff.wait_and_advance();
+                    continue;
+                }
+            };
+
+        eprintln!("[leader] connected");
+        let mut t0 = std::time::Instant::now();
+
+        loop {
+            // Poll arm → zenoh pub (block_on 来自 sync 上下文，安全)
+            if let Some(cmd) = leader.poll() {
+                if let Ok(bytes) = codec.encode_command(&cmd) {
+                    let s = session.clone();
+                    let k = k_ctrl.clone();
+                    rt.block_on(async {
+                        s.put(k, bytes)
+                            .congestion_control(zenoh::qos::CongestionControl::Drop)
+                            .await
+                    }).ok();
+                }
+            }
+
+            // Follower status → SSE
+            if let Ok(json) = status_rx.try_recv() {
+                let _ = web_state.status_tx.send(json);
+            }
+
+            // Keyboard
+            if let Ok(line) = kb_rx.try_recv() {
+                if let Some(cmd) = parse_key(&line) {
+                    send_zenoh_cmd(&codec, cmd, &session, &k_cmd, &rt);
+                }
+            }
+
+            // Web commands
+            while let Ok(cmd_str) = cmd_rx.try_recv() {
+                if let Some(cmd) = parse_web_cmd(&cmd_str) {
+                    send_zenoh_cmd(&codec, cmd, &session, &k_cmd, &rt);
+                }
+            }
+
+            std::thread::sleep(Duration::from_millis(25));
+
+            if t0.elapsed() >= Duration::from_secs(2) {
+                eprintln!("[leader] running...");
+                t0 = std::time::Instant::now();
+            }
+        }
+    }
 }
 
 fn connect_leader_arm(
     port: &str,
     config: &DaemonConfig,
-    handle: &tokio::runtime::Handle,
 ) -> anyhow::Result<(
     So101Leader<feetech_servo_sdk::driver::FeetechController<tokio_serial::SerialStream>>,
     (),
 )> {
     let bus = FeetechBus::new(port, config.arm.so101.baud)?;
     let arm = So101Arm::new(bus, So101Config::default());
-    let leader = So101Leader::new(arm, handle.clone(), 1, "leader");
+    let leader = So101Leader::new(arm, 1, "leader");
     Ok((leader, ()))
 }
 
@@ -213,12 +206,12 @@ fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
     }
 }
 
-fn send_zenoh_cmd(codec: &PostcardCodec, cmd: ControlCommand, session: zenoh::Session, key: &str) {
+fn send_zenoh_cmd(codec: &PostcardCodec, cmd: ControlCommand, session: &zenoh::Session, key: &str, rt: &tokio::runtime::Runtime) {
     println!("  -> {:?}", cmd);
     if let Ok(bytes) = codec.encode_control_command(&cmd) {
         let s = session.clone();
         let k = key.to_string();
-        tokio::spawn(async move {
+        let _ = rt.spawn(async move {
             s.put(k, bytes)
                 .congestion_control(zenoh::qos::CongestionControl::Drop)
                 .await.ok();
