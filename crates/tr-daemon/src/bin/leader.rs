@@ -1,8 +1,7 @@
-//! Leader daemon: 三线程架构
+//! Leader daemon: 主循环直接读臂，zenoh+web 共享单 runtime
 //!
-//! thread 1 (arm):    读串口 → mpsc 发送位置
-//! thread 2 (zenoh):  事件驱动 pub/sub + web server
-//! main thread:       收 3 路 mpsc，协调转发 + sleep 节流
+//! main thread:  读串口 → 发布 zenoh → 收消息 → sleep
+//! rt:           zenoh + web 共享 (multi_thread(1))
 
 use std::io;
 use std::sync::mpsc;
@@ -20,8 +19,6 @@ use tr_so101::resolver::{parse_hex_u16, resolve_arm_port, UsbDeviceConfig};
 use tr_so101::{FeetechBus, So101Arm};
 use std::path::Path;
 
-// ── 单实例检查 ───────────────────────────────
-
 fn check_single_instance() -> bool {
     let pid_file = "/tmp/dorarobot-leader.pid";
     if let Ok(content) = std::fs::read_to_string(pid_file) {
@@ -36,193 +33,10 @@ fn check_single_instance() -> bool {
     true
 }
 
-// ── Thread 1: arm 串口读取 ─────────────────────
-
-fn arm_spawn(
-    port: String,
-    baud: u32,
-    tx_pos: mpsc::Sender<Vec<f32>>,
-    rx_cmd: mpsc::Receiver<ArmCmd>,
-) {
-    std::thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_io().enable_time().build()
-        {
-            Ok(r) => r,
-            Err(e) => { eprintln!("[arm] runtime: {e}"); return; }
-        };
-
-        let mut backoff = Backoff::new(1, 30);
-        loop {
-            let (mut arm, _guard) = match rt.block_on(async {
-                let bus = FeetechBus::new(&port, baud)?;
-                let mut arm = So101Arm::new(bus, So101Config::default());
-                arm.set_torque(false).await?;  // leader backdrivable
-                Ok::<_, anyhow::Error>((arm, ()))
-            }) {
-                Ok(a) => { backoff.reset(); a }
-                Err(e) => {
-                    eprintln!("[arm] connect error: {e}");
-                    backoff.wait_and_advance();
-                    continue;
-                }
-            };
-
-            eprintln!("[arm] connected");
-            loop {
-                // 检查控制指令
-                if let Ok(cmd) = rx_cmd.try_recv() {
-                    match cmd {
-                        ArmCmd::EnableTorque  => {
-                            rt.block_on(async { arm.set_torque(true).await }).ok();
-                            eprintln!("[arm] torque ON");
-                        }
-                        ArmCmd::DisableTorque => {
-                            rt.block_on(async { arm.set_torque(false).await }).ok();
-                            eprintln!("[arm] torque OFF");
-                        }
-                    }
-                }
-
-                match rt.block_on(async { arm.read_joints().await }) {
-                    Ok(joints) => {
-                        if tx_pos.send(joints.to_vec()).is_err() { break; }
-                    }
-                    Err(e) => {
-                        eprintln!("[arm] read error: {e}");
-                        break;
-                    }
-                }
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            eprintln!("[arm] disconnected, reconnecting...");
-        }
-    });
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ArmCmd {
-    EnableTorque,
-    DisableTorque,
-}
-
-// ── Thread 2: zenoh + web ──────────────────────
-
-struct ZenohHandle {
-    session: zenoh::Session,
-    rt: tokio::runtime::Runtime,
-}
-
-impl ZenohHandle {
-    fn publish(&self, key: &str, payload: Vec<u8>) {
-        let s = self.session.clone();
-        let k = key.to_string();
-        self.rt.spawn(async move {
-            s.put(k, payload)
-                .congestion_control(zenoh::qos::CongestionControl::Drop)
-                .await.ok();
-        });
-    }
-}
-
-fn zenoh_spawn(
-    id: String,
-    tx_status: mpsc::Sender<String>,
-    cmd_tx: mpsc::Sender<ControlCommand>,
-    web_state_tx: tokio::sync::broadcast::Sender<String>,
-) -> ZenohHandle {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1).enable_io().enable_time().build().unwrap();
-
-    let (web_cmd_tx, mut web_cmd_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    let app = web::router(Arc::new(WebState {
-        status_tx: web_state_tx.clone(),
-        cmd_tx: web_cmd_tx,
-        arm_info: format!("arm={id}"),
-    }));
-
-    // spawn web
-    rt.spawn(async {
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
-        eprintln!("[zenoh] web console → http://localhost:8080");
-        axum::serve(listener, app).await.unwrap();
-    });
-
-    // web commands → cmd_tx
-    std::thread::spawn(move || loop {
-        match web_cmd_rx.blocking_recv() {
-            Some(s) => {
-                if let Some(c) = parse_web_cmd(&s) {
-                    let _ = cmd_tx.send(c);
-                }
-            }
-            None => break,
-        }
-    });
-
-    // zenoh session
-    let session = rt.block_on(async {
-        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
-    }).unwrap();
-
-    // subscriber → mpsc
-    let k_status = format!("tr/{id}/status");
-    rt.block_on(async {
-        session.declare_subscriber(k_status.as_str())
-            .callback(move |sample| {
-                let payload = sample.payload().to_bytes().to_vec();
-                let _ = tx_status.send(String::from_utf8_lossy(&payload).to_string());
-            })
-            .await.map_err(|e| anyhow::anyhow!("{e}"))
-    }).unwrap();
-
-    eprintln!("[zenoh] session ready");
-    ZenohHandle { session, rt }
-}
-
-fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
-    match cmd {
-        "TorqueOn" => Some(ControlCommand::TorqueOn),
-        "TorqueOff" => Some(ControlCommand::TorqueOff),
-        "StartRecord" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
-        "EndRecord" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
-        "ReRecord" => Some(ControlCommand::ReRecord),
-        "Stop" => Some(ControlCommand::Stop),
-        _ => None,
-    }
-}
-
-// ── Keyboard ──────────────────────────────────
-
-fn kb_spawn(tx_cmd: mpsc::Sender<ControlCommand>) {
-    std::thread::spawn(move || loop {
-        let mut line = String::new();
-        if io::stdin().read_line(&mut line).is_err() { break; }
-        if let Some(cmd) = parse_key(&line) {
-            let _ = tx_cmd.send(cmd);
-        }
-    });
-}
-
-fn parse_key(line: &str) -> Option<ControlCommand> {
-    match line.trim() {
-        "o" => Some(ControlCommand::TorqueOn),
-        "x" => Some(ControlCommand::TorqueOff),
-        "s" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
-        "f" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
-        "r" => Some(ControlCommand::ReRecord),
-        "q" => Some(ControlCommand::Stop),
-        _ => None,
-    }
-}
-
-// ── 入口 ─────────────────────────────────────
-
 fn main() -> anyhow::Result<()> {
     if !check_single_instance() {
         return Ok(());
     }
-
     let args: Vec<String> = std::env::args().collect();
     let config_path = args.iter().position(|a| a == "--config")
         .and_then(|i| args.get(i + 1)).map(|s| s.as_str())
@@ -243,86 +57,180 @@ fn main() -> anyhow::Result<()> {
         Some(p) => p,
         None => resolve_arm_port(&device)?,
     };
-
     eprintln!("[leader] arm={id}  port={port}");
 
-    // ── 创建管道 ─────────────────────────────
-    let (arm_tx, arm_rx)      = mpsc::channel::<Vec<f32>>();
-    let (arm_cmd_tx, arm_cmd_rx) = mpsc::channel::<ArmCmd>();
-    let (status_tx, status_rx) = mpsc::channel::<String>();
-    let (ctrl_tx, ctrl_rx)     = mpsc::channel::<ControlCommand>();
+    // ── zenoh + web runtime ─────────────────────
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1).enable_io().enable_time().build()?;
 
+    // web
     let (web_state_tx, _) = tokio::sync::broadcast::channel::<String>(8);
+    let (web_cmd_tx, mut web_cmd_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let app = web::router(Arc::new(WebState {
+        status_tx: web_state_tx.clone(),
+        cmd_tx: web_cmd_tx,
+        arm_info: format!("arm={id}"),
+    }));
+    rt.spawn(async {
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+        eprintln!("[web] http://localhost:8080");
+        axum::serve(listener, app).await.unwrap();
+    });
 
-    // ── 启动线程 ─────────────────────────────
-    let zh = zenoh_spawn(id.clone(), status_tx, ctrl_tx.clone(), web_state_tx.clone());
-    arm_spawn(port.clone(), config.arm.so101.baud, arm_tx, arm_cmd_rx);
-    kb_spawn(ctrl_tx.clone());
+    // web commands → ctrl_tx
+    let (ctrl_tx, ctrl_rx) = mpsc::channel::<ControlCommand>();
+    let ctrl_tx2 = ctrl_tx.clone();  // for keyboard
+    std::thread::spawn(move || loop {
+        match web_cmd_rx.blocking_recv() {
+            Some(s) => { if let Some(c) = parse_web_cmd(&s) { let _ = ctrl_tx.send(c); } }
+            None => break,
+        }
+    });
 
-    let codec = PostcardCodec;
+    // keyboard
+    std::thread::spawn({
+        let tx = ctrl_tx2;
+        move || loop {
+            let mut line = String::new();
+            if io::stdin().read_line(&mut line).is_err() { break; }
+            if let Some(c) = parse_key(&line) { let _ = tx.send(c); }
+        }
+    });
+
+    // zenoh session
+    let session = rt.block_on(async {
+        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+    })?;
     let k_ctrl = format!("tr/{id}/control");
     let k_cmd  = format!("tr/{id}/command");
-    let mut seq: u64 = 0;
+
+    // subscriber → mpsc
+    let (status_tx, status_rx) = mpsc::channel::<String>();
+    rt.block_on(async {
+        session.declare_subscriber(format!("tr/{id}/status").as_str())
+            .callback(move |sample| {
+                let payload = sample.payload().to_bytes().to_vec();
+                let _ = status_tx.send(String::from_utf8_lossy(&payload).to_string());
+            })
+            .await.map_err(|e| anyhow::anyhow!("{e}"))
+    })?;
+
+    // ── arm runtime (current_thread, 仅用于 block_on) ──
+    let arm_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_io().enable_time().build()?;
+    let mut arm: Option<So101Arm<tr_so101::FeetechBus>> = None;
+
+    let codec = PostcardCodec;
     let mut fsm = tr_daemon::state::Fsm::new();
+    let mut seq: u64 = 0;
+    let mut backoff = Backoff::new(1, 30);
 
     println!("── leader-daemon ──");
-    println!("  arm:   {port}");
-    println!("  web:   http://localhost:8080");
-    println!("  keys:  o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
+    println!("  port: {port}");
+    println!("  web:  http://localhost:8080");
     println!("────────────────────");
 
-    // ── 主协调循环 ──────────────────────────
     loop {
-        let t0 = std::time::Instant::now();
-
-        // ① 控制指令（键盘/web/从臂状态触发）
-        while let Ok(cmd) = ctrl_rx.try_recv() {
-            let (state, action) = fsm.apply(&cmd);
-            eprintln!("[main] ctrl={:?} → {:?}", cmd, state);
-
-            // 力矩控制 → arm 线程（主臂始终不上力）
-            match action {
-                tr_daemon::state::DataflowAction::Stop => {
-                    let _ = arm_cmd_tx.send(ArmCmd::DisableTorque);
+        // ── arm connect/reconnect ────────────────
+        if arm.is_none() {
+            let _guard = rt.enter();
+            match FeetechBus::new(&port, config.arm.so101.baud) {
+                Ok(bus) => {
+                    let mut a = So101Arm::new(bus, So101Config::default());
+                    arm_rt.block_on(async { a.set_torque(false).await }).ok();
+                    arm = Some(a);
+                    backoff.reset();
+                    eprintln!("[arm] connected");
                 }
-                _ => {}
+                Err(e) => {
+                    drop(_guard);
+                    eprintln!("[arm] error: {e}");
+                    backoff.wait_and_advance();
+                    std::thread::sleep(Duration::from_millis(1000));
+                    continue;
+                }
             }
+        }
 
+        // ── 读臂 → 发布 zenoh ─────────────────
+        if let Some(ref mut a) = arm {
+            match arm_rt.block_on(async { a.read_joints().await }) {
+                Ok(joints) => {
+                    if fsm.current() != tr_daemon::state::ArmState::Idle {
+                        let positions: Vec<f64> = joints.iter().map(|&j| j as f64).collect();
+                        let mut h = MessageHeader::new(1, "leader", ControlMode::JointTargets);
+                        h.seq = seq;
+                        let cmd = TeleopCommand {
+                            header: h,
+                            body: CommandBody::Joint(JointTargets {
+                                positions, velocities: None, efforts: None,
+                            }),
+                        };
+                        seq += 1;
+                        if let Ok(bytes) = codec.encode_command(&cmd) {
+                            let s = session.clone();
+                            let k = k_ctrl.clone();
+                            rt.spawn(async move {
+                                s.put(k, bytes)
+                                    .congestion_control(zenoh::qos::CongestionControl::Drop)
+                                    .await.ok();
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[arm] read error: {e}");
+                    arm = None;
+                    continue;
+                }
+            }
+        }
+
+        // ── 收控制指令 ────────────────────────
+        while let Ok(cmd) = ctrl_rx.try_recv() {
+            let (state, _) = fsm.apply(&cmd);
+            eprintln!("[ctrl] {cmd:?} → {state:?}");
             // 控制指令 → zenoh
             if let Ok(bytes) = codec.encode_control_command(&cmd) {
-                zh.publish(&k_cmd, bytes);
+                let s = session.clone();
+                let k = k_cmd.clone();
+                rt.spawn(async move {
+                    s.put(k, bytes)
+                        .congestion_control(zenoh::qos::CongestionControl::Drop)
+                        .await.ok();
+                });
             }
         }
 
-        // ② arm 位置 → zenoh 发布（取最新一条）
-        if let Ok(positions) = arm_rx.try_recv() {
-            if fsm.current() == tr_daemon::state::ArmState::Idle {
-                continue;
-            }
-            let positions_f64: Vec<f64> = positions.iter().map(|&p| p as f64).collect();
-            let mut h = MessageHeader::new(1, "leader", ControlMode::JointTargets);
-            h.seq = seq;
-            let cmd = TeleopCommand {
-                header: h,
-                body: CommandBody::Joint(JointTargets {
-                    positions: positions_f64, velocities: None, efforts: None,
-                }),
-            };
-            seq += 1;
-            if let Ok(bytes) = codec.encode_command(&cmd) {
-                zh.publish(&k_ctrl, bytes);
-            }
-        }
-
-        // ③ 从臂状态 → SSE
+        // ── 收从臂状态 → SSE ──────────────────
         while let Ok(json) = status_rx.try_recv() {
             let _ = web_state_tx.send(json);
         }
 
         std::thread::sleep(Duration::from_millis(25));
+    }
+}
 
-        if t0.elapsed() > Duration::from_secs(10) {
-            eprintln!("[main] tick > 10s, slow?");
-        }
+fn parse_key(line: &str) -> Option<ControlCommand> {
+    match line.trim() {
+        "o" => Some(ControlCommand::TorqueOn),
+        "x" => Some(ControlCommand::TorqueOff),
+        "s" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
+        "f" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
+        "r" => Some(ControlCommand::ReRecord),
+        "q" => Some(ControlCommand::Stop),
+        _ => None,
+    }
+}
+
+fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
+    match cmd {
+        "TorqueOn" => Some(ControlCommand::TorqueOn),
+        "TorqueOff" => Some(ControlCommand::TorqueOff),
+        "StartRecord" => Some(ControlCommand::StartRecord { task: "teleop".into() }),
+        "EndRecord" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
+        "ReRecord" => Some(ControlCommand::ReRecord),
+        "Stop" => Some(ControlCommand::Stop),
+        _ => None,
     }
 }
