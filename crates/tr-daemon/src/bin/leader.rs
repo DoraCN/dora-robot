@@ -109,7 +109,10 @@ fn main() -> anyhow::Result<()> {
         eprintln!("[leader] connected");
 
         // ── Inner control loop ──────────────────────────────
+        let mut loops: u64 = 0;
+        let mut t_last_report = std::time::Instant::now();
         loop {
+            let t0 = std::time::Instant::now();
             match leader.poll() {
                 Some(cmd) => {
                     if let Ok(bytes) = codec.encode_command(&cmd) {
@@ -124,6 +127,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 None => {}
             }
+            let t_poll = t0.elapsed();
 
             // Follower status → SSE
             match status_rx.recv_timeout(Duration::from_millis(5)) {
@@ -149,6 +153,13 @@ fn main() -> anyhow::Result<()> {
             }
 
             std::thread::sleep(Duration::from_millis(25));
+
+            loops += 1;
+            if t_last_report.elapsed() >= Duration::from_secs(2) {
+                eprintln!("[leader] loops={loops} poll={:?}/loop", t_poll);
+                loops = 0;
+                t_last_report = std::time::Instant::now();
+            }
         }
     }
 }
