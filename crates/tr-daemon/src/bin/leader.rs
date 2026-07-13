@@ -134,6 +134,12 @@ fn main() -> anyhow::Result<()> {
     println!("  keys:  o(使能) x(失能) s(采集) f(保存) r(重录) q(停止) c(校准)");
     println!("────────────────────");
 
+    // 启动时推送初始状态，激活 Web 页面按钮
+    let init_st = DaemonStatus::new("IDLE", false);
+    if let Ok(json) = serde_json::to_string(&init_st) {
+        let _ = web_state_tx.send(json);
+    }
+
     loop {
         // ── arm connect/reconnect ────────────────
         if arm.is_none() {

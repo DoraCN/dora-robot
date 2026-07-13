@@ -104,10 +104,11 @@ body.rot270 .c{
   padding:28px 22px;display:flex;flex-direction:column;gap:20px
 }
 body.rot180 .c{transform:translate(-50%,-50%) rotate(180deg)}
-/* 竖屏: 状态栏竖排，按钮铺满 */
-body.rot90 .status-bar,body.rot270 .status-bar{flex-direction:column;gap:12px}
-body.rot90 .status-item,body.rot270 .status-item{flex:none;text-align:left;display:flex;justify-content:space-between;align-items:center;padding:14px 22px}
-body.rot90 .status-item .v,body.rot270 .status-item .v{margin-top:0}
+/* 竖屏: 状态栏横排一行，按钮铺满 */
+body.rot90 .status-bar,body.rot270 .status-bar{flex-direction:row;gap:8px}
+body.rot90 .status-item,body.rot270 .status-item{flex:1;text-align:center;display:block;padding:10px 6px;font-size:18px}
+body.rot90 .status-item .l,body.rot270 .status-item .l{font-size:14px}
+body.rot90 .status-item .v,body.rot270 .status-item .v{margin-top:2px;font-size:26px}
 body.rot90 .btn,body.rot270 .btn{flex:none;width:100%;min-height:140px;font-size:40px}
 body.rot90 .btn-row,body.rot270 .btn-row{flex-direction:column;gap:16px}
 body.rot90 h1,body.rot270 h1{padding-right:0}
