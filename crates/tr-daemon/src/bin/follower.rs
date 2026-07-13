@@ -70,21 +70,8 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let k_status = format!("tr/{id}/status");
-
-    // shared session when peers/listen configured
     let use_shared = !config.zenoh.peers.is_empty() || config.zenoh.listen.is_some();
     let listen = config.zenoh.listen.as_deref();
-    let shared_session = if use_shared {
-        Some(tr_transport_zenoh::open_shared_session(rt_zenoh.handle(), &config.zenoh.peers, listen)?)
-    } else {
-        None
-    };
-
-    let mut t_st = if let Some(ref s) = shared_session {
-        ZenohTransport::pub_from_session(rt_zenoh.handle(), &k_status, s)?
-    } else {
-        ZenohTransport::publisher(rt_zenoh.handle(), &k_status)?
-    };
 
     let codec = PostcardCodec;
     let mut backoff = Backoff::new(1, 30);
@@ -92,6 +79,19 @@ fn main() -> anyhow::Result<()> {
 
     // ── Main loop with recovery ──────────────────────────────
     loop {
+        // 每次进恢复循环都重建 shared session 和 t_st
+        let shared_session = if use_shared {
+            Some(tr_transport_zenoh::open_shared_session(rt_zenoh.handle(), &config.zenoh.peers, listen)?)
+        } else {
+            None
+        };
+
+        let mut t_st = if let Some(ref s) = shared_session {
+            ZenohTransport::pub_from_session(rt_zenoh.handle(), &k_status, s)?
+        } else {
+            ZenohTransport::publisher(rt_zenoh.handle(), &k_status)?
+        };
+
         let (mut follower, rt_arm, mut t_ctrl, mut t_cmd) =
             match connect_arm(&port, &config, &id, &ids_arr, &rt_zenoh, shared_session.as_ref()) {
                 Ok(t) => {
