@@ -143,6 +143,8 @@ h1{font-size:36px;margin-bottom:4px;padding-right:180px}
 .btn-on:hover{background:#16a34a}
 .btn-off{background:#ef4444;color:#fff}
 .btn-off:hover{background:#dc2626}
+.btn-calib{background:#6366f1;color:#fff}
+.btn-calib:hover{background:#4f46e5}
 .btn-rec{background:#3b82f6;color:#fff}
 .btn-rec:hover{background:#2563eb}
 .btn-save{background:#22c55e;color:#fff}
@@ -182,6 +184,10 @@ h1{font-size:36px;margin-bottom:4px;padding-right:180px}
   <div class="btn-row">
     <button class="btn btn-on" id="btn-torque-on" onclick="cmd('TorqueOn')">⚡ 使能</button>
     <button class="btn btn-off" id="btn-torque-off" onclick="cmd('TorqueOff')" disabled>⏻ 失能</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-calib" id="btn-calibrate" onclick="cmd('Calibrate')" disabled>⊡ 校准零点</button>
   </div>
 
   <div class="btn-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:6px">
@@ -265,6 +271,7 @@ evt.onmessage=function(e){
 function updateButtons(state){
   document.getElementById('btn-torque-on').disabled=state!=='IDLE';
   document.getElementById('btn-torque-off').disabled=state==='IDLE';
+  document.getElementById('btn-calibrate').disabled=state!=='IDLE';
   document.getElementById('btn-start').disabled=state!=='READY';
   document.getElementById('btn-success').disabled=state!=='RECORDING';
   document.getElementById('btn-fail').disabled=state!=='RECORDING';

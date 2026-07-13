@@ -131,7 +131,7 @@ fn main() -> anyhow::Result<()> {
     println!("── leader-daemon ──");
     println!("  port: {port}");
     println!("  web:  http://localhost:8080");
-    println!("  keys:  o(使能) x(失能) s(采集) f(保存) r(重录) q(停止)");
+    println!("  keys:  o(使能) x(失能) s(采集) f(保存) r(重录) q(停止) c(校准)");
     println!("────────────────────");
 
     loop {
@@ -240,6 +240,7 @@ fn parse_key(line: &str) -> Option<ControlCommand> {
         "f" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
         "r" => Some(ControlCommand::ReRecord),
         "q" => Some(ControlCommand::Stop),
+        "c" => Some(ControlCommand::Calibrate),
         _ => None,
     }
 }
@@ -252,6 +253,7 @@ fn parse_web_cmd(cmd: &str) -> Option<ControlCommand> {
         "EndRecord" => Some(ControlCommand::EndRecord { outcome: EpisodeOutcome::Success }),
         "ReRecord" => Some(ControlCommand::ReRecord),
         "Stop" => Some(ControlCommand::Stop),
+        "Calibrate" => Some(ControlCommand::Calibrate),
         _ => None,
     }
 }

@@ -23,6 +23,8 @@ pub enum ControlCommand {
     ReRecord,
     /// Stop recording, return to Ready (Recording → Ready).
     Stop,
+    /// Calibrate servo midpoints (only allowed in Idle).
+    Calibrate,
 }
 
 /// Daemon status published by follower-daemon every second (JSON).

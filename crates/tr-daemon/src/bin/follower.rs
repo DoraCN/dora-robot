@@ -111,6 +111,17 @@ fn main() -> anyhow::Result<()> {
                     Ok(Some(inbound)) => {
                         if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                             eprintln!("[follower] cmd={:?}", cmd);
+
+                            // 校准：仅在 Idle 状态，失能时执行
+                            if cmd == ControlCommand::Calibrate && fsm.current() == ArmState::Idle {
+                                eprintln!("[follower] calibrating...");
+                                rt_arm.block_on(async {
+                                    follower.bus_mut().sync_set_middle_positions(&ids_arr).await
+                                }).ok();
+                                eprintln!("[follower] calibration done");
+                                continue;
+                            }
+
                             let (_, action) = fsm.apply(&cmd);
                             handle_dataflow_action(
                                 &mut dora,

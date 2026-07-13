@@ -74,6 +74,11 @@ impl Fsm {
                 DataflowAction::None
             }
 
+            // ── Calibrate (only in Idle) ───────────────────────
+            (ArmState::Idle, ControlCommand::Calibrate) => {
+                DataflowAction::None
+            }
+
             // ── Invalid transitions ─────────────────────────────────
             _ => DataflowAction::None,
         };
