@@ -205,11 +205,15 @@ const ROTATES=['','rot90','rot180','rot270'];
 
 function toggleRotate(){
   rotateIdx=(rotateIdx+1)%4;
+  applyRotation(rotateIdx);
+  localStorage.rotation=rotateIdx;
+}
+function applyRotation(idx){
   const body=document.body;
   body.classList.remove('rot','rot90','rot180','rot270');
-  const r=ROTATES[rotateIdx];
+  const r=ROTATES[idx];
   if(r){body.classList.add('rot',r);}
-  document.getElementById('btn-rotate').textContent=['↻','↺','↻','↺'][rotateIdx];
+  document.getElementById('btn-rotate').textContent=['↻','↺','↻','↺'][idx];
 }
 
 function toggleTheme(){
@@ -222,16 +226,22 @@ function toggleFs(){
   if(document.fullscreenElement){
     document.exitFullscreen();
     document.body.classList.remove('fs');
+    localStorage.fs='0';
   }else{
     document.documentElement.requestFullscreen();
     document.body.classList.add('fs');
+    localStorage.fs='1';
   }
 }
 
 (function(){
+  const rot=parseInt(localStorage.rotation)||0;
+  rotateIdx=rot;
+  applyRotation(rot);
   if(localStorage.theme==='light'){document.body.classList.add('light');document.getElementById('btn-theme').textContent='☾';}
+  if(localStorage.fs==='1'){document.body.classList.add('fs');document.documentElement.requestFullscreen().catch(()=>{});}
   document.addEventListener('fullscreenchange',()=>{
-    if(!document.fullscreenElement)document.body.classList.remove('fs');
+    if(!document.fullscreenElement){document.body.classList.remove('fs');localStorage.fs='0';}
   });
 })();
 
