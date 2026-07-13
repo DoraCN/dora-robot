@@ -6,6 +6,16 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 pub struct DaemonConfig {
     pub arm: ArmConfig,
+    #[serde(default)]
+    pub zenoh: ZenohConfig,
+}
+
+/// Optional zenoh communication settings.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ZenohConfig {
+    /// Explicit peer endpoints (tcp/<ip>:<port>), e.g. ["tcp/192.168.1.20:7447"]
+    #[serde(default)]
+    pub peers: Vec<String>,
 }
 
 /// Instance identity + hardware type selector.
@@ -47,6 +57,9 @@ ids = [1, 2, 3, 4, 5, 6]
 vid = "0x0483"
 pid = "0x5740"
 serial = "TEST0001"
+
+[zenoh]
+# peers = ["tcp/192.168.1.20:7447"]
 "#,
         )
         .unwrap()

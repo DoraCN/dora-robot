@@ -10,3 +10,4 @@ tr-transport = { workspace = true }
 zenoh = { workspace = true }
 tokio = { version = "1", features = ["rt"] }
 anyhow = "1"
+serde_json = { workspace = true }

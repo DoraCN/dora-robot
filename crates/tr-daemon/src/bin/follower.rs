@@ -70,7 +70,7 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let k_status = format!("tr/{id}/status");
-    let mut t_st = ZenohTransport::publisher(rt_zenoh.handle(), &k_status)?;
+    let mut t_st = ZenohTransport::publisher_with_peers(rt_zenoh.handle(), &k_status, &config.zenoh.peers)?;
 
     let codec = PostcardCodec;
     let mut backoff = Backoff::new(1, 30);
@@ -269,8 +269,8 @@ fn connect_arm(
     rt_arm.block_on(async { follower.bus_mut().disable_torque(ids_arr).await })?;
     drop(_guard);
 
-    let t_ctrl = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/control"))?;
-    let t_cmd = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/command"))?;
+    let t_ctrl = ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/control"), &config.zenoh.peers)?;
+    let t_cmd = ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/command"), &config.zenoh.peers)?;
 
     Ok((follower, rt_arm, t_ctrl, t_cmd))
 }

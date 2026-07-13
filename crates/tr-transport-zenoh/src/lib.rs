@@ -21,16 +21,31 @@ struct KeepAlive {
     sub: Option<Box<dyn std::any::Any + Send>>,
 }
 
-fn zenoh_session(handle: &tokio::runtime::Handle) -> anyhow::Result<zenoh::Session> {
+fn zenoh_session(handle: &tokio::runtime::Handle, peers: &[String]) -> anyhow::Result<zenoh::Session> {
+    let zcfg = if peers.is_empty() {
+        zenoh::Config::default()
+    } else {
+        let eps: Vec<&str> = peers.iter().map(|s| s.as_str()).collect();
+        let json = serde_json::json!({"connect": {"endpoints": eps}});
+        serde_json::from_value(json)?
+    };
     handle.block_on(async {
-        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
+        zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}"))
     })
+}
+
+fn zenoh_session_default(handle: &tokio::runtime::Handle) -> anyhow::Result<zenoh::Session> {
+    zenoh_session(handle, &[])
 }
 
 impl ZenohTransport {
     pub fn publisher(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
+        Self::publisher_with_peers(handle, key_expr, &[])
+    }
+
+    pub fn publisher_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String]) -> anyhow::Result<Self> {
         let key = key_expr.into();
-        let session = zenoh_session(handle)?;
+        let session = zenoh_session(handle, peers)?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
         let session2 = session.clone();
@@ -56,8 +71,12 @@ impl ZenohTransport {
     }
 
     pub fn subscriber(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
+        Self::subscriber_with_peers(handle, key_expr, &[])
+    }
+
+    pub fn subscriber_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String]) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel::<(Channel, Vec<u8>)>();
-        let session = zenoh_session(handle)?;
+        let session = zenoh_session(handle, peers)?;
         let key = key_expr.into();
         let sub = handle.block_on(async {
             session

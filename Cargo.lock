@@ -6110,6 +6110,7 @@ name = "tr-transport-zenoh"
 version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
+ "serde_json",
  "tokio",
  "tr-transport",
  "zenoh",

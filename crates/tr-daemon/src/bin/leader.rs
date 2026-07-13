@@ -101,9 +101,16 @@ fn main() -> anyhow::Result<()> {
     }
 
     // zenoh session
-    let session = rt.block_on(async {
-        zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}"))
-    })?;
+    let session = {
+        let zcfg = if config.zenoh.peers.is_empty() {
+            zenoh::Config::default()
+        } else {
+            let eps: Vec<&str> = config.zenoh.peers.iter().map(|s| s.as_str()).collect();
+            eprintln!("[leader] zenoh peers: {:?}", eps);
+            serde_json::from_value(serde_json::json!({"connect": {"endpoints": eps}}))?
+        };
+        rt.block_on(async { zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}")) })?
+    };
     let k_ctrl = format!("tr/{id}/control");
     let k_cmd  = format!("tr/{id}/command");
 
