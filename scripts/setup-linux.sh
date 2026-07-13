@@ -430,7 +430,8 @@ register_services() {
         cat > "$UNIT_DIR/dorarobot-follower.service" << EOF
 [Unit]
 Description=DoraRobot Follower Daemon
-After=default.target
+After=default.target network.target
+Wants=network.target
 
 [Service]
 Type=simple
@@ -450,7 +451,8 @@ EOF
         cat > "$UNIT_DIR/dorarobot-leader.service" << EOF
 [Unit]
 Description=DoraRobot Leader Daemon + Web Console
-After=default.target
+After=default.target network.target
+Wants=network.target
 
 [Service]
 Type=simple
