@@ -291,7 +291,9 @@ pid = "0x${FOLLOWER_PID}"
 serial = "${FOLLOWER_SERIAL}"
 $([ -n "$ZENOH_PEER" ] && echo "
 [zenoh]
-peers = [\"tcp/${ZENOH_PEER}\"]")
+peers = [\"tcp/${ZENOH_PEER}\"]")$([ -n "$ZENOH_LISTEN" ] && echo "
+[zenoh]
+listen = \"${ZENOH_LISTEN}\"")
 EOF
         info "  $PROJECT/config/follower.toml"
     fi
@@ -317,7 +319,9 @@ bind = "0.0.0.0"
 port = 8080
 $([ -n "$ZENOH_PEER" ] && echo "
 [zenoh]
-peers = [\"tcp/${ZENOH_PEER}\"]")
+peers = [\"tcp/${ZENOH_PEER}\"]")$([ -n "$ZENOH_LISTEN" ] && echo "
+[zenoh]
+listen = \"${ZENOH_LISTEN}\"")
 EOF
         info "  $PROJECT/config/leader.toml"
     fi
@@ -555,6 +559,9 @@ main() {
     echo ""
     read -rp "  zenoh 对端 IP:端口 (留空使用多播发现，例 192.168.1.20:7447): " ZENOH_PEER
     ZENOH_PEER="${ZENOH_PEER:-}"
+    echo ""
+    read -rp "  zenoh 固定监听端口 (留空随机端口，建议 7447): " ZENOH_LISTEN
+    ZENOH_LISTEN="${ZENOH_LISTEN:-}"
 
     echo ""
     echo "  ╔══════════════════════════════════════════╗"

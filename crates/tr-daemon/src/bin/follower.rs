@@ -71,9 +71,11 @@ fn main() -> anyhow::Result<()> {
 
     let k_status = format!("tr/{id}/status");
 
-    // peers 模式: 打开共享 session，所有 transport 复用，避免端口冲突
-    let shared_session = if !config.zenoh.peers.is_empty() {
-        Some(tr_transport_zenoh::open_shared_session(rt_zenoh.handle(), &config.zenoh.peers)?)
+    // shared session when peers/listen configured
+    let use_shared = !config.zenoh.peers.is_empty() || config.zenoh.listen.is_some();
+    let listen = config.zenoh.listen.as_deref();
+    let shared_session = if use_shared {
+        Some(tr_transport_zenoh::open_shared_session(rt_zenoh.handle(), &config.zenoh.peers, listen)?)
     } else {
         None
     };
@@ -289,8 +291,8 @@ fn connect_arm(
         )
     } else {
         (
-            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/control"), &config.zenoh.peers)?,
-            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/command"), &config.zenoh.peers)?,
+            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/control"), &config.zenoh.peers, config.zenoh.listen.as_deref())?,
+            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/command"), &config.zenoh.peers, config.zenoh.listen.as_deref())?,
         )
     };
 

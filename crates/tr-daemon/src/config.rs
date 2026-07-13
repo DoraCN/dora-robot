@@ -16,6 +16,9 @@ pub struct ZenohConfig {
     /// Explicit peer endpoints (tcp/<ip>:<port>), e.g. ["tcp/192.168.1.20:7447"]
     #[serde(default)]
     pub peers: Vec<String>,
+    /// Fixed listen port, e.g. "7447". Leave empty for random.
+    #[serde(default)]
+    pub listen: Option<String>,
 }
 
 /// Instance identity + hardware type selector.

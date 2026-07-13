@@ -102,17 +102,21 @@ fn main() -> anyhow::Result<()> {
 
     // zenoh session
     let session = {
-        let zcfg = if config.zenoh.peers.is_empty() {
-            zenoh::Config::default()
+        let peers = &config.zenoh.peers;
+        let listen = config.zenoh.listen.as_deref();
+        if peers.is_empty() && listen.is_none() {
+            rt.block_on(async { zenoh::open(zenoh::Config::default()).await.map_err(|e| anyhow::anyhow!("{e}")) })?
         } else {
-            let eps: Vec<&str> = config.zenoh.peers.iter().map(|s| s.as_str()).collect();
-            eprintln!("[leader] zenoh peers: {:?}", eps);
-            serde_json::from_value(serde_json::json!({
+            let eps: Vec<&str> = peers.iter().map(|s| s.as_str()).collect();
+            let listen_eps: Vec<String> = listen.iter().map(|p| format!("tcp/0.0.0.0:{p}")).collect();
+            if !eps.is_empty() { eprintln!("[leader] zenoh peers: {:?}", eps); }
+            if !listen_eps.is_empty() { eprintln!("[leader] zenoh listen: {:?}", listen_eps); }
+            let zcfg: zenoh::Config = serde_json::from_value(serde_json::json!({
                 "connect": {"endpoints": eps},
-                "listen": {"endpoints": ["tcp/0.0.0.0:7447"]}
-            }))?
-        };
-        rt.block_on(async { zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}")) })?
+                "listen": {"endpoints": listen_eps}
+            }))?;
+            rt.block_on(async { zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}")) })?
+        }
     };
     let k_ctrl = format!("tr/{id}/control");
     let k_cmd  = format!("tr/{id}/command");

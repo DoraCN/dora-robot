@@ -21,25 +21,26 @@ struct KeepAlive {
     sub: Option<Box<dyn std::any::Any + Send>>,
 }
 
-fn make_zcfg(peers: &[String]) -> zenoh::Config {
-    if peers.is_empty() {
+fn make_zcfg(peers: &[String], listen: Option<&str>) -> zenoh::Config {
+    if peers.is_empty() && listen.is_none() {
         return zenoh::Config::default();
     }
     let eps: Vec<&str> = peers.iter().map(|s| s.as_str()).collect();
+    let listen_eps: Vec<String> = listen.iter().map(|p| format!("tcp/0.0.0.0:{p}")).collect();
     serde_json::from_value(serde_json::json!({
         "connect": {"endpoints": eps},
-        "listen": {"endpoints": ["tcp/0.0.0.0:7447"]}
+        "listen": {"endpoints": listen_eps}
     })).unwrap_or_default()
 }
 
-/// Open a shared zenoh session with optional peer endpoints.
-pub fn open_shared_session(handle: &tokio::runtime::Handle, peers: &[String]) -> anyhow::Result<zenoh::Session> {
-    let zcfg = make_zcfg(peers);
+/// Open a shared zenoh session with optional peer endpoints and listen port.
+pub fn open_shared_session(handle: &tokio::runtime::Handle, peers: &[String], listen: Option<&str>) -> anyhow::Result<zenoh::Session> {
+    let zcfg = make_zcfg(peers, listen);
     handle.block_on(async { zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}")) })
 }
 
-fn zenoh_session(handle: &tokio::runtime::Handle, peers: &[String]) -> anyhow::Result<zenoh::Session> {
-    let zcfg = make_zcfg(peers);
+fn zenoh_session(handle: &tokio::runtime::Handle, peers: &[String], listen: Option<&str>) -> anyhow::Result<zenoh::Session> {
+    let zcfg = make_zcfg(peers, listen);
     handle.block_on(async {
         zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}"))
     })
@@ -79,12 +80,12 @@ impl ZenohTransport {
     }
 
     pub fn publisher(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
-        Self::publisher_with_peers(handle, key_expr, &[])
+        Self::publisher_with_peers(handle, key_expr, &[], None)
     }
 
-    pub fn publisher_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String]) -> anyhow::Result<Self> {
+    pub fn publisher_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String], listen: Option<&str>) -> anyhow::Result<Self> {
         let key = key_expr.into();
-        let session = zenoh_session(handle, peers)?;
+        let session = zenoh_session(handle, peers, listen)?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
         let session2 = session.clone();
@@ -110,12 +111,12 @@ impl ZenohTransport {
     }
 
     pub fn subscriber(handle: &tokio::runtime::Handle, key_expr: impl Into<String>) -> anyhow::Result<Self> {
-        Self::subscriber_with_peers(handle, key_expr, &[])
+        Self::subscriber_with_peers(handle, key_expr, &[], None)
     }
 
-    pub fn subscriber_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String]) -> anyhow::Result<Self> {
+    pub fn subscriber_with_peers(handle: &tokio::runtime::Handle, key_expr: impl Into<String>, peers: &[String], listen: Option<&str>) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel::<(Channel, Vec<u8>)>();
-        let session = zenoh_session(handle, peers)?;
+        let session = zenoh_session(handle, peers, listen)?;
         let key = key_expr.into();
         let sub = handle.block_on(async {
             session
