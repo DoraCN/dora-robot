@@ -116,6 +116,7 @@ fn main() -> anyhow::Result<()> {
         let mut first_write = true;
         let mut last_write = Instant::now();
         let mut last_written = [0.0_f32; 6];
+        let mut last_beat = Instant::now();
         eprintln!("[follower] state=IDLE  M1-style (25ms+dedup)");
 
         'inner: loop {
@@ -123,6 +124,7 @@ fn main() -> anyhow::Result<()> {
             loop {
                 match t_cmd.recv(Duration::ZERO) {
                     Ok(Some(inbound)) => {
+                        last_beat = Instant::now();  // zenoh 存活
                         if let Ok(cmd) = codec.decode_control_command(&inbound.frame) {
                             eprintln!("[follower] cmd={:?}", cmd);
 
@@ -160,6 +162,7 @@ fn main() -> anyhow::Result<()> {
             // ── ② Joint command (M1: recv one at a time) ────
             match t_ctrl.recv(Duration::from_millis(5)) {
                 Ok(Some(inbound)) => {
+                    last_beat = Instant::now();  // zenoh 存活
                     if fsm.current() != ArmState::Idle {
                         if let Ok(cmd) = codec.decode_command(&inbound.frame) {
                             let positions: Vec<f32> = match &cmd.body {
@@ -248,6 +251,13 @@ fn main() -> anyhow::Result<()> {
                 if let Ok(json) = serde_json::to_vec(&st) {
                     let _ = t_st.send(tr_transport::qos::Channel::Control, &json);
                 }
+            }
+
+            // zenoh 心跳超时 → 重建 transports
+            if last_beat.elapsed() > Duration::from_secs(5) {
+                eprintln!("[follower] zenoh heartbeat timeout, reconnecting...");
+                handle_recovery(&mut t_st, &mut last_status, &mut dora);
+                break 'inner;
             }
 
             std::thread::sleep(Duration::from_micros(500));
