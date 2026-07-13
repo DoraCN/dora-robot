@@ -78,7 +78,7 @@ fn main() -> anyhow::Result<()> {
 
     // ── Main loop with recovery ──────────────────────────────
     loop {
-        let (mut follower, rt_arm, mut t_ctrl, mut t_cmd, mut t_obs) =
+        let (mut follower, rt_arm, mut t_ctrl, mut t_cmd) =
             match connect_arm(&port, &config, &id, &ids_arr, &rt_zenoh) {
                 Ok(t) => {
                     backoff.reset();
@@ -102,7 +102,6 @@ fn main() -> anyhow::Result<()> {
         let mut first_write = true;
         let mut last_write = Instant::now();
         let mut last_written = [0.0_f32; 6];
-        let mut read_counter: u8 = 0;
         eprintln!("[follower] state=IDLE  M1-style (25ms+dedup)");
 
         'inner: loop {
@@ -193,26 +192,6 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // ── ③ Read at low rate (~12Hz, every ~3 loops) ───
-            read_counter += 1;
-            if read_counter >= 3 {
-                read_counter = 0;
-                match rt_arm.block_on(
-                    async { follower.arm_mut().read_joints().await.map(|a| a.to_vec()) },
-                ) {
-                    Ok(obs) => {
-                        if let Ok(b) = codec.encode_observation(&obs) {
-                            let _ = t_obs.send(tr_transport::qos::Channel::Control, &b);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("[follower] bus read error, recovery: {e}");
-                        handle_recovery(&mut t_st, &mut last_status, &mut dora);
-                        break 'inner;
-                    }
-                }
-            }
-
             // ── DORA alive check ──────────────────────────────
             if let Some(ref d) = dora {
                 if !d.alive() {
@@ -256,7 +235,6 @@ type ArmHandle = (
     tokio::runtime::Runtime,
     ZenohTransport,
     ZenohTransport,
-    ZenohTransport,
 );
 
 fn connect_arm(
@@ -282,9 +260,8 @@ fn connect_arm(
 
     let t_ctrl = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/control"))?;
     let t_cmd = ZenohTransport::subscriber(rt_zenoh.handle(), &format!("tr/{id}/command"))?;
-    let t_obs = ZenohTransport::publisher(rt_zenoh.handle(), &format!("tr/{id}/observation"))?;
 
-    Ok((follower, rt_arm, t_ctrl, t_cmd, t_obs))
+    Ok((follower, rt_arm, t_ctrl, t_cmd))
 }
 
 fn handle_dataflow_action(
