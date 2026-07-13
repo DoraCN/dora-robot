@@ -70,7 +70,19 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let k_status = format!("tr/{id}/status");
-    let mut t_st = ZenohTransport::publisher_with_peers(rt_zenoh.handle(), &k_status, &config.zenoh.peers)?;
+
+    // peers 模式: 打开共享 session，所有 transport 复用，避免端口冲突
+    let shared_session = if !config.zenoh.peers.is_empty() {
+        Some(tr_transport_zenoh::open_shared_session(rt_zenoh.handle(), &config.zenoh.peers)?)
+    } else {
+        None
+    };
+
+    let mut t_st = if let Some(ref s) = shared_session {
+        ZenohTransport::pub_from_session(rt_zenoh.handle(), &k_status, s)?
+    } else {
+        ZenohTransport::publisher(rt_zenoh.handle(), &k_status)?
+    };
 
     let codec = PostcardCodec;
     let mut backoff = Backoff::new(1, 30);
@@ -79,7 +91,7 @@ fn main() -> anyhow::Result<()> {
     // ── Main loop with recovery ──────────────────────────────
     loop {
         let (mut follower, rt_arm, mut t_ctrl, mut t_cmd) =
-            match connect_arm(&port, &config, &id, &ids_arr, &rt_zenoh) {
+            match connect_arm(&port, &config, &id, &ids_arr, &rt_zenoh, shared_session.as_ref()) {
                 Ok(t) => {
                     backoff.reset();
                     t
@@ -254,6 +266,7 @@ fn connect_arm(
     id: &str,
     ids_arr: &[u8; 6],
     rt_zenoh: &tokio::runtime::Runtime,
+    shared_session: Option<&zenoh::Session>,
 ) -> anyhow::Result<ArmHandle> {
     let rt_arm = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
@@ -269,8 +282,17 @@ fn connect_arm(
     rt_arm.block_on(async { follower.bus_mut().disable_torque(ids_arr).await })?;
     drop(_guard);
 
-    let t_ctrl = ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/control"), &config.zenoh.peers)?;
-    let t_cmd = ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/command"), &config.zenoh.peers)?;
+    let (t_ctrl, t_cmd) = if let Some(s) = shared_session {
+        (
+            ZenohTransport::sub_from_session(rt_zenoh.handle(), &format!("tr/{id}/control"), s)?,
+            ZenohTransport::sub_from_session(rt_zenoh.handle(), &format!("tr/{id}/command"), s)?,
+        )
+    } else {
+        (
+            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/control"), &config.zenoh.peers)?,
+            ZenohTransport::subscriber_with_peers(rt_zenoh.handle(), &format!("tr/{id}/command"), &config.zenoh.peers)?,
+        )
+    };
 
     Ok((follower, rt_arm, t_ctrl, t_cmd))
 }

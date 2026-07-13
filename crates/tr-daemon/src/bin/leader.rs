@@ -107,7 +107,10 @@ fn main() -> anyhow::Result<()> {
         } else {
             let eps: Vec<&str> = config.zenoh.peers.iter().map(|s| s.as_str()).collect();
             eprintln!("[leader] zenoh peers: {:?}", eps);
-            serde_json::from_value(serde_json::json!({"connect": {"endpoints": eps}}))?
+            serde_json::from_value(serde_json::json!({
+                "connect": {"endpoints": eps},
+                "listen": {"endpoints": ["tcp/0.0.0.0:7447"]}
+            }))?
         };
         rt.block_on(async { zenoh::open(zcfg).await.map_err(|e| anyhow::anyhow!("{e}")) })?
     };
